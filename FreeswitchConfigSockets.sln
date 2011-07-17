@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 10.00
 # Visual Studio 2008
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Library", "Library\Library.csproj", "{959D2956-E058-470C-B415-851FC334A00C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketsLibrary", "Library\SocketsLibrary.csproj", "{959D2956-E058-470C-B415-851FC334A00C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tester", "Tester\Tester.csproj", "{34A58647-85AA-42F8-B272-3E76AE42F625}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SocketsTester", "Tester\SocketsTester.csproj", "{34A58647-85AA-42F8-B272-3E76AE42F625}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
