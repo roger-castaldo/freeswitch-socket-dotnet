@@ -213,6 +213,11 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
         #endregion
 
         #region Variables
+        public Dictionary<string, string>.KeyCollection Keys
+        {
+            get { return _properties.Keys; }
+        }
+
         public string this[string name]{
             get
             {
