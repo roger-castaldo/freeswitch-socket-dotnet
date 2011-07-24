@@ -83,9 +83,9 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             ExecuteApplication("hangup", true);
         }
 
-        public bool IsExtensionLive(string extensionNumber, string domain, string profile)
+        public bool IsExtensionLive(string extensionNumber, string domain)
         {
-            string apiRes = _IssueAPICommand(string.Format(REGISTRATIONS_FOR_PROFILE_CHECK_COMMAND, profile), true);
+            string apiRes = _IssueAPICommand(string.Format(REGISTRATIONS_FOR_PROFILE_CHECK_COMMAND, domain), true);
             return new Regex(string.Format(REGEX_EXTENSION_CHECK, extensionNumber, domain),RegexOptions.Compiled|RegexOptions.ECMAScript).Matches(extensionNumber).Count>0;
         }
 
