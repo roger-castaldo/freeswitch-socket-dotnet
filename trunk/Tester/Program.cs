@@ -23,13 +23,17 @@ namespace SocketTester
         {
             SocketEvent ev;
             conn.Answer();
+            string[] keys = new string[conn.Keys.Count];
+            conn.Keys.CopyTo(keys, 0);
+            foreach (string str in keys)
+                System.Diagnostics.Debug.WriteLine(str + " --> " + (conn[str]==null ? "" : conn[str]));
             string pin = conn.PlayAndGetDigits(4, 10, 3, 3000, "#","/opt/freeswitch/sounds/en/us/callie/conference/8000/conf-pin.wav" ,null, "\\d+", null);
             Console.WriteLine("The pin entered was: " + (pin == null ? "NO PIN" : pin));
             if (pin == "8888")
             {
                 conn.PlayAudioFile("/opt/freeswitch/sounds/music/48000/ponce-preludio-in-e-major.wav", false);
                 Thread.Sleep(10000);
-                if (conn.IsExtensionLive("1001", conn.Domain, "internal"))
+                if (conn.IsExtensionLive("1001", conn.Domain))
                 {
                     ev = conn.BridgeToExtension("1001", conn.Domain, true);
                     if (ev == null)
