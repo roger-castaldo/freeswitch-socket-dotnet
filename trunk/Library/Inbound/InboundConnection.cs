@@ -245,6 +245,13 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             }
         }
 
+        public string GetSystemVariable(string name)
+        {
+            string ret =  _IssueAPICommand("eval $${" + name + "}", true);
+            ret = (ret != null ? (ret.StartsWith("$") ? ret.Substring(1) : ret) : null);
+            return ret;
+        }
+
         public string UUID
         {
             get { return this["Unique-ID"]; }

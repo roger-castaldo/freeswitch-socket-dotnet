@@ -188,7 +188,12 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
         protected ASocket(IPAddress ip, int port,string password)
         {
+            _awaitingCommandsEvents = new Queue<ManualResetEvent>();
+            _awaitingCommandReturns = new Dictionary<string, string>();
+            _commandThreads = new Dictionary<string, ManualResetEvent>();
+            _awaitingCommandReturns = new Dictionary<string, string>();
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
+            _handlers = new List<sEventHandler>();
             _exit = false;
             _isConnected = false;
             _ipAddress = ip;
