@@ -5,6 +5,8 @@ using Org.Reddragonit.FreeSwitchSockets.Inbound;
 using System.Net;
 using System.Threading;
 using Org.Reddragonit.FreeSwitchSockets.Messages;
+using Org.Reddragonit.FreeSwitchSockets.Outbound;
+using Org.Reddragonit.FreeSwitchSockets;
 
 namespace SocketTester
 {
@@ -15,8 +17,16 @@ namespace SocketTester
             Console.WriteLine("Starting up listener socket to test PIN obtainment...");
             InboundListener list = new InboundListener(IPAddress.Any, 8084,
                 new InboundListener.delProcessConnection(ProcessConnection));
+            OutboundSocket os = new OutboundSocket(IPAddress.Loopback, 8021, "ClueCon", new ASocket.delProcessEventMessage(ProcessEvent),
+                null, null, null);
+            os.RegisterEvent("HEARTBEAT");
             Console.WriteLine("Hit Enter to exit...");
             Console.ReadLine();
+            os.Close();
+        }
+
+        public static void ProcessEvent(SocketEvent evnt){
+            Console.WriteLine("Event recieved of type " + evnt.EventName);
         }
 
         public static void ProcessConnection(InboundConnection conn)
