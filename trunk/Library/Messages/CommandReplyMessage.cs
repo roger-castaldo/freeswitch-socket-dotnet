@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Xml;
 
 namespace Org.Reddragonit.FreeSwitchSockets.Messages
 {
@@ -36,6 +37,26 @@ namespace Org.Reddragonit.FreeSwitchSockets.Messages
         public string ReplyMessage
         {
             get { return _replyMessage; }
+        }
+
+        public override void ReadXml(XmlReader reader)
+        {
+            reader.MoveToContent();
+            XmlReader xr = reader.ReadSubtree();
+            xr.MoveToContent();
+            if (xr.Value != "")
+                _replyMessage = xr.Value;
+            base.ReadXml(xr);
+        }
+
+        public override void WriteXml(XmlWriter writer)
+        {
+            writer.WriteStartElement("Message");
+            writer.WriteValue(_replyMessage);
+            writer.WriteEndElement();
+            writer.WriteStartElement("Data");
+            base.WriteXml(writer);
+            writer.WriteEndElement();
         }
     }
 }

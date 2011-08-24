@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using Org.Reddragonit.FreeSwitchSockets.Outbound;
+using System.Xml;
 
 namespace Org.Reddragonit.FreeSwitchSockets.Messages
 {
@@ -78,5 +79,25 @@ namespace Org.Reddragonit.FreeSwitchSockets.Messages
             
         }
 
+        public override void ReadXml(XmlReader reader)
+        {
+            reader.MoveToContent();
+            XmlReader xr = reader.ReadSubtree();
+            xr.MoveToContent();
+            if (xr.Value != "")
+                _fullMessage = xr.Value;
+            base.ReadXml(xr);
+        }
+
+        public override void WriteXml(XmlWriter writer)
+        {
+            writer.WriteStartElement("Message");
+            if (_fullMessage != null)
+                writer.WriteValue(_fullMessage);
+            writer.WriteEndElement();
+            writer.WriteStartElement("Data");
+            base.WriteXml(writer);
+            writer.WriteEndElement();
+        }
     }
 }
