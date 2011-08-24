@@ -2,10 +2,11 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
+using System.Xml.Serialization;
 
 namespace Org.Reddragonit.FreeSwitchSockets.Messages
 {
-    public abstract class ASocketMessage
+    public abstract class ASocketMessage : IXmlSerializable
     {
         private Dictionary<string, string> _parameters;
         public string this[string name]
@@ -42,6 +43,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.Messages
 
         internal static Dictionary<string, string> ParseProperties(string propertiesText)
         {
+            if (propertiesText == null)
+                return new Dictionary<string, string>();
             Dictionary<string, string> ret = new Dictionary<string, string>();
             foreach (string str in propertiesText.Split('\n'))
             {
@@ -77,5 +80,38 @@ namespace Org.Reddragonit.FreeSwitchSockets.Messages
             }
             return ret;
         }
+
+        #region IXmlSerializable Members
+
+        public virtual System.Xml.Schema.XmlSchema GetSchema()
+        {
+            return null;
+        }
+
+        public virtual void ReadXml(XmlReader reader)
+        {
+            reader.MoveToContent();
+            XmlReader xr = reader.ReadSubtree();
+            while (!xr.EOF)
+            {
+                xr.MoveToContent();
+                _parameters.Add(xr.GetAttribute("key"), xr.Value);
+            }
+        }
+
+        public virtual void WriteXml(XmlWriter writer)
+        {
+            foreach (string str in _parameters.Keys)
+            {
+                writer.WriteStartElement("Item");
+                writer.WriteStartAttribute("key");
+                writer.WriteValue(str);
+                writer.WriteEndAttribute();
+                writer.WriteValue(_parameters[str]);
+                writer.WriteEndElement();
+            }
+        }
+
+        #endregion
     }
 }

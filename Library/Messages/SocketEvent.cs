@@ -74,5 +74,25 @@ namespace Org.Reddragonit.FreeSwitchSockets.Messages
             set { _message = value; }
         }
 
+        public override void ReadXml(XmlReader reader)
+        {
+            reader.MoveToContent();
+            XmlReader xr = reader.ReadSubtree();
+            xr.MoveToContent();
+            if (xr.Value != "")
+                _message = xr.Value;
+            base.ReadXml(xr);
+        }
+
+        public override void WriteXml(XmlWriter writer)
+        {
+            writer.WriteStartElement("Message");
+            if (_message != null)
+                writer.WriteValue(_message);
+            writer.WriteEndElement();
+            writer.WriteStartElement("Data");
+            base.WriteXml(writer);
+            writer.WriteEndElement();
+        }
     }
 }
