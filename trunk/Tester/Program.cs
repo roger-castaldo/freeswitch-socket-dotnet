@@ -19,7 +19,7 @@ namespace SocketTester
                 new InboundListener.delProcessConnection(ProcessConnection));
             OutboundSocket os = new OutboundSocket(IPAddress.Loopback, 8021, "ClueCon", new ASocket.delProcessEventMessage(ProcessEvent),
                 null, null, null);
-            os.RegisterEvent("HEARTBEAT");
+            os.RegisterEvent("all");
             Console.WriteLine("Hit Enter to exit...");
             Console.ReadLine();
             os.Close();
