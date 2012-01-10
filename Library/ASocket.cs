@@ -121,6 +121,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
         }
 
         private string _textReceived;
+        private List<string> _splitMessages;
         private byte[] buffer;
         private List<sEventHandler> _handlers;
         private Queue<byte[]> _awaitingCommands;
@@ -136,6 +137,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
         protected ASocket(Socket socket)
         {
+            _splitMessages = new List<string>();
             _awaitingCommandsEvents = new Queue<ManualResetEvent>();
             _awaitingCommandReturns = new Dictionary<string, string>();
             _commandThreads = new Dictionary<string, ManualResetEvent>();
@@ -188,6 +190,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
         protected ASocket(IPAddress ip, int port,string password)
         {
+            _splitMessages = new List<string>();
             _awaitingCommandsEvents = new Queue<ManualResetEvent>();
             _awaitingCommandReturns = new Dictionary<string, string>();
             _commandThreads = new Dictionary<string, ManualResetEvent>();
@@ -340,58 +343,50 @@ namespace Org.Reddragonit.FreeSwitchSockets
                 {
                     _textReceived += ASCIIEncoding.ASCII.GetString(buffer, 0, bytesRead);
                     _textReceived = _textReceived.TrimStart('\n');
-                    while (_textReceived.Contains("Content-Type:"))
+                    while (_textReceived.Contains(MESSAGE_END_STRING))
                     {
-                        string origMsg = _textReceived.Substring(0, _textReceived.IndexOf(MESSAGE_END_STRING)).TrimEnd('\n');
+                        _splitMessages.Add(_textReceived.Substring(0, _textReceived.IndexOf(MESSAGE_END_STRING)).Trim('\n'));
+                        _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
+                    }
+                    while (_splitMessages.Count>0)
+                    {
+                        string origMsg = _splitMessages[0];
+                        _splitMessages.RemoveAt(0);
                         Dictionary<string, string> pars = ASocketMessage.ParseProperties(origMsg);
-                        _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING)).TrimStart('\n');
                         string subMsg = "";
                         if (pars.ContainsKey("Content-Length"))
                         {
-                            int msgLen = int.Parse(pars["Content-Length"]);
-                            while (_textReceived.Length < msgLen)
+                            if (_splitMessages.Count > 0)
                             {
-                                buffer = new byte[msgLen - _textReceived.Length];
-                                _socket.Receive(buffer, msgLen - _textReceived.Length, SocketFlags.None);
-                                _textReceived += System.Text.ASCIIEncoding.ASCII.GetString(buffer);
+                                subMsg = _splitMessages[0];
+                                _splitMessages.RemoveAt(0);
                             }
-                            subMsg = _textReceived.Substring(0, msgLen);
-                            _textReceived = _textReceived.Substring(subMsg.Length).TrimStart('\n');
+                            else
+                            {
+                                _splitMessages.Insert(0, origMsg);
+                                break;
+                            }
                         }
                         if (pars["Content-Type"] == "text/event-plain")
                         {
                             SocketEvent se;
-                            if (subMsg.Contains(MESSAGE_END_STRING))
-                                se = new SocketEvent(subMsg.Substring(0, subMsg.IndexOf(MESSAGE_END_STRING)));
-                            else
-                                se = new SocketEvent(subMsg);
+                            se = new SocketEvent(subMsg);
+                            if (se["Content-Length"] != null)
+                            {
+                                if (_splitMessages.Count > 0)
+                                {
+                                    se.Message = _splitMessages[0];
+                                    _splitMessages.RemoveAt(0);
+                                }
+                                else
+                                {
+                                    _splitMessages.Insert(0, origMsg);
+                                    _splitMessages.Insert(1, subMsg);
+                                    break;
+                                }
+                            }
                             if (se.EventName == "BACKGROUND_JOB")
                             {
-                                if (se["Content-Length"] != null)
-                                {
-                                    string eventMsg = subMsg.Substring(subMsg.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
-                                    int msgLen = int.Parse(se["Content-Length"]);
-                                    if (eventMsg.Length < msgLen)
-                                    {
-                                        if (_textReceived.Length > 0)
-                                        {
-                                            if (_textReceived.Length > msgLen - eventMsg.Length)
-                                                eventMsg += _textReceived.Substring(0, msgLen - eventMsg.Length);
-                                            else
-                                            {
-                                                eventMsg += _textReceived;
-                                                _textReceived = "";
-                                            }
-                                        }
-                                        if (eventMsg.Length < msgLen)
-                                        {
-                                            buffer = new byte[msgLen - eventMsg.Length];
-                                            _socket.Receive(buffer, msgLen - eventMsg.Length, SocketFlags.None);
-                                            eventMsg += ASCIIEncoding.ASCII.GetString(buffer);
-                                        }
-                                    }
-                                    se.Message = eventMsg;
-                                }
                                 lock (_commandThreads)
                                 {
                                     if (_commandThreads.ContainsKey(se["Job-UUID"]))
@@ -424,36 +419,21 @@ namespace Org.Reddragonit.FreeSwitchSockets
                         else if (pars["Content-Type"] == "log/data")
                         {
                             SocketLogMessage lg;
-                            if (subMsg.Contains(MESSAGE_END_STRING))
-                                lg = new SocketLogMessage(subMsg.Substring(0, subMsg.IndexOf(MESSAGE_END_STRING)));
-                            else
-                                lg = new SocketLogMessage(subMsg);
-                            string eventMsg = subMsg.Substring(subMsg.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
-                            int msgLen = int.Parse(lg.ContentLength);
-                            if (eventMsg.Length < msgLen)
+                            lg = new SocketLogMessage(subMsg);
+                            if (_splitMessages.Count > 0)
                             {
-                                if (_textReceived.Length > 0)
-                                {
-                                    if (_textReceived.Length > msgLen - eventMsg.Length)
-                                        eventMsg += _textReceived.Substring(0, msgLen - eventMsg.Length);
-                                    else
-                                    {
-                                        eventMsg += _textReceived;
-                                        _textReceived = "";
-                                    }
-                                }
-                                if (eventMsg.Length < msgLen)
-                                {
-                                    buffer = new byte[msgLen - eventMsg.Length];
-                                    _socket.Receive(buffer, msgLen - eventMsg.Length, SocketFlags.None);
-                                    eventMsg += ASCIIEncoding.ASCII.GetString(buffer);
-                                }
+                                string eventMsg = _splitMessages[0];
+                                _splitMessages.RemoveAt(0);
+                                lg.FullMessage = eventMsg;
+                                msgs.Enqueue(lg);
                             }
-                            lg.FullMessage = eventMsg;
-                            msgs.Enqueue(lg);
+                            else
+                            {
+                                _splitMessages.Insert(0, origMsg);
+                                _splitMessages.Insert(1, subMsg);
+                                break;
+                            }
                         }
-                        else if (_textReceived.Contains(MESSAGE_END_STRING))
-                            _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
                     }
                 }
                 buffer = new byte[BUFFER_SIZE];
