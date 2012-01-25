@@ -122,6 +122,8 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
         private string _textReceived;
         private List<string> _splitMessages;
+        private List<string> _processingMessages;
+        private bool _processing = false;
         private byte[] buffer;
         private List<sEventHandler> _handlers;
         private Queue<byte[]> _awaitingCommands;
@@ -137,6 +139,8 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
         protected ASocket(Socket socket)
         {
+            _textReceived = "";
+            _processingMessages = new List<string>();
             _splitMessages = new List<string>();
             _awaitingCommandsEvents = new Queue<ManualResetEvent>();
             _awaitingCommandReturns = new Dictionary<string, string>();
@@ -190,6 +194,8 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
         protected ASocket(IPAddress ip, int port,string password)
         {
+            _textReceived = "";
+            _processingMessages = new List<string>();
             _splitMessages = new List<string>();
             _awaitingCommandsEvents = new Queue<ManualResetEvent>();
             _awaitingCommandReturns = new Dictionary<string, string>();
@@ -338,113 +344,164 @@ namespace Org.Reddragonit.FreeSwitchSockets
             try
             {
                 int bytesRead = _socket.EndReceive(ar);
-                Queue<ASocketMessage> msgs = new Queue<ASocketMessage>();
                 if (bytesRead > 0)
                 {
-                    _textReceived += ASCIIEncoding.ASCII.GetString(buffer, 0, bytesRead);
-                    _textReceived = _textReceived.TrimStart('\n');
-                    while (_textReceived.Contains(MESSAGE_END_STRING))
+                    lock (_textReceived)
                     {
-                        _splitMessages.Add(_textReceived.Substring(0, _textReceived.IndexOf(MESSAGE_END_STRING)).Trim('\n'));
-                        _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
-                    }
-                    while (_splitMessages.Count>0)
-                    {
-                        string origMsg = _splitMessages[0];
-                        _splitMessages.RemoveAt(0);
-                        Dictionary<string, string> pars = ASocketMessage.ParseProperties(origMsg);
-                        string subMsg = "";
-                        if (pars.ContainsKey("Content-Length"))
+                        _textReceived += ASCIIEncoding.ASCII.GetString(buffer, 0, bytesRead);
+                        _textReceived = _textReceived.TrimStart('\n');
+                        lock (_splitMessages)
                         {
-                            if (_splitMessages.Count > 0)
+                            while (_textReceived.Contains(MESSAGE_END_STRING))
                             {
-                                subMsg = _splitMessages[0];
-                                _splitMessages.RemoveAt(0);
-                            }
-                            else
-                            {
-                                _splitMessages.Insert(0, origMsg);
-                                break;
-                            }
-                        }
-                        if (pars["Content-Type"] == "text/event-plain")
-                        {
-                            SocketEvent se;
-                            se = new SocketEvent(subMsg);
-                            if (se["Content-Length"] != null)
-                            {
-                                if (_splitMessages.Count > 0)
-                                {
-                                    se.Message = _splitMessages[0];
-                                    _splitMessages.RemoveAt(0);
-                                }
-                                else
-                                {
-                                    _splitMessages.Insert(0, origMsg);
-                                    _splitMessages.Insert(1, subMsg);
-                                    break;
-                                }
-                            }
-                            if (se.EventName == "BACKGROUND_JOB")
-                            {
-                                lock (_commandThreads)
-                                {
-                                    if (_commandThreads.ContainsKey(se["Job-UUID"]))
-                                    {
-                                        lock (_awaitingCommandReturns)
-                                        {
-                                            _awaitingCommandReturns.Add(se["Job-UUID"], se.Message.Trim('\n'));
-                                        }
-                                        ManualResetEvent mre = _commandThreads[se["Job-UUID"]];
-                                        _commandThreads.Remove(se["Job-UUID"]);
-                                        mre.Set();
-                                    }
-                                }
-                            }
-                            msgs.Enqueue(se);
-                        }
-                        else if (pars["Content-Type"] == "command/reply")
-                        {
-                            CommandReplyMessage crm = new CommandReplyMessage(origMsg, subMsg);
-                            msgs.Enqueue(crm);
-                            if (crm["Job-UUID"] != null)
-                            {
-                                lock (_awaitingCommandsEvents)
-                                {
-                                    _currentCommandID = crm["Job-UUID"];
-                                    _awaitingCommandsEvents.Dequeue().Set();
-                                }
-                            }
-                        }
-                        else if (pars["Content-Type"] == "log/data")
-                        {
-                            SocketLogMessage lg;
-                            lg = new SocketLogMessage(subMsg);
-                            if (_splitMessages.Count > 0)
-                            {
-                                string eventMsg = _splitMessages[0];
-                                _splitMessages.RemoveAt(0);
-                                lg.FullMessage = eventMsg;
-                                msgs.Enqueue(lg);
-                            }
-                            else
-                            {
-                                _splitMessages.Insert(0, origMsg);
-                                _splitMessages.Insert(1, subMsg);
-                                break;
+                                _splitMessages.Add(_textReceived.Substring(0, _textReceived.IndexOf(MESSAGE_END_STRING)).Trim('\n'));
+                                _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
                             }
                         }
                     }
                 }
-                buffer = new byte[BUFFER_SIZE];
-                _socket.BeginReceive(buffer, 0, BUFFER_SIZE,
-                                     SocketFlags.None, new AsyncCallback(ReceiveCallback),
-                                     null);
-                if (msgs.Count > 0)
-                    _processMessageQueue(msgs);
             }
             catch (Exception e)
             {
+            }
+            buffer = new byte[BUFFER_SIZE];
+            _socket.BeginReceive(buffer, 0, BUFFER_SIZE,
+                                 SocketFlags.None, new AsyncCallback(ReceiveCallback),
+                                 null);
+            ProcessMessageList();
+        }
+
+        private void ProcessMessageList()
+        {   
+            bool run = false;
+            lock (_processingMessages)
+            {
+                if (!_processing)
+                {
+                    run = true;
+                    _processing = true;
+                    Thread.CurrentThread.Name = "EventMessageProcessor_" + Thread.CurrentThread.ManagedThreadId.ToString();
+                    lock (_splitMessages)
+                    {
+                        while (_splitMessages.Count > 0)
+                        {
+                            _processingMessages.Add(_splitMessages[0]);
+                            _splitMessages.RemoveAt(0);
+                        }
+                    }
+                }
+            }
+            Queue<ASocketMessage> msgs = new Queue<ASocketMessage>();
+            while (run)
+            {
+                while (_processingMessages.Count > 0)
+                {
+                    string origMsg = _processingMessages[0];
+                    _processingMessages.RemoveAt(0);
+                    Dictionary<string, string> pars = ASocketMessage.ParseProperties(origMsg);
+                    string subMsg = "";
+                    if (pars.ContainsKey("Content-Length"))
+                    {
+                        if (_processingMessages.Count > 0)
+                        {
+                            subMsg = _processingMessages[0];
+                            _processingMessages.RemoveAt(0);
+                        }
+                        else
+                        {
+                            _processingMessages.Insert(0, origMsg);
+                            break;
+                        }
+                    }
+                    if (pars["Content-Type"] == "text/event-plain")
+                    {
+                        SocketEvent se;
+                        se = new SocketEvent(subMsg);
+                        if (se["Content-Length"] != null)
+                        {
+                            if (_processingMessages.Count > 0)
+                            {
+                                se.Message = _processingMessages[0];
+                                _processingMessages.RemoveAt(0);
+                            }
+                            else
+                            {
+                                _processingMessages.Insert(0, origMsg);
+                                _processingMessages.Insert(1, subMsg);
+                                break;
+                            }
+                        }
+                        if (se.EventName == "BACKGROUND_JOB")
+                        {
+                            lock (_commandThreads)
+                            {
+                                if (_commandThreads.ContainsKey(se["Job-UUID"]))
+                                {
+                                    lock (_awaitingCommandReturns)
+                                    {
+                                        _awaitingCommandReturns.Add(se["Job-UUID"], se.Message.Trim('\n'));
+                                    }
+                                    ManualResetEvent mre = _commandThreads[se["Job-UUID"]];
+                                    _commandThreads.Remove(se["Job-UUID"]);
+                                    mre.Set();
+                                }
+                            }
+                        }
+                        msgs.Enqueue(se);
+                    }
+                    else if (pars["Content-Type"] == "command/reply")
+                    {
+                        CommandReplyMessage crm = new CommandReplyMessage(origMsg, subMsg);
+                        msgs.Enqueue(crm);
+                        if (crm["Job-UUID"] != null)
+                        {
+                            lock (_awaitingCommandsEvents)
+                            {
+                                _currentCommandID = crm["Job-UUID"];
+                                _awaitingCommandsEvents.Dequeue().Set();
+                            }
+                        }
+                    }
+                    else if (pars["Content-Type"] == "log/data")
+                    {
+                        SocketLogMessage lg;
+                        lg = new SocketLogMessage(subMsg);
+                        if (_processingMessages.Count > 0)
+                        {
+                            string eventMsg = _processingMessages[0];
+                            _processingMessages.RemoveAt(0);
+                            lg.FullMessage = eventMsg;
+                            msgs.Enqueue(lg);
+                        }
+                        else
+                        {
+                            _processingMessages.Insert(0, origMsg);
+                            _processingMessages.Insert(1, subMsg);
+                            break;
+                        }
+                    }
+                }
+                if (msgs.Count > 0)
+                    _processMessageQueue(msgs);
+                lock (_processingMessages)
+                {
+                    lock (_splitMessages)
+                    {
+                        if (_splitMessages.Count > 0)
+                        {
+                            while (_splitMessages.Count > 0)
+                            {
+                                _processingMessages.Add(_splitMessages[0]);
+                                _splitMessages.RemoveAt(0);
+                            }
+                        }
+                        else
+                        {
+                            run = false;
+                            _processing = false;
+                        }
+                    }
+                }
             }
         }
 
