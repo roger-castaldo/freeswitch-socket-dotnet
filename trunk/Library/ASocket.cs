@@ -380,7 +380,11 @@ namespace Org.Reddragonit.FreeSwitchSockets
                 {
                     run = true;
                     _processing = true;
-                    Thread.CurrentThread.Name = "EventMessageProcessor_" + Thread.CurrentThread.ManagedThreadId.ToString();
+                    try
+                    {
+                        Thread.CurrentThread.Name = "EventMessageProcessor_" + Thread.CurrentThread.ManagedThreadId.ToString();
+                    }
+                    catch (Exception e) { }
                     lock (_splitMessages)
                     {
                         while (_splitMessages.Count > 0)
