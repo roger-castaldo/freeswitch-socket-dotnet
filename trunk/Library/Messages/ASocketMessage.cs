@@ -41,6 +41,14 @@ namespace Org.Reddragonit.FreeSwitchSockets.Messages
             _parameters = ParseProperties(message);
         }
 
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder();
+            foreach (string str in _parameters.Keys)
+                sb.AppendLine(str + ":" + _parameters[str]);
+            return sb.ToString();
+        }
+
         internal static Dictionary<string, string> ParseProperties(string propertiesText)
         {
             if (propertiesText == null)
