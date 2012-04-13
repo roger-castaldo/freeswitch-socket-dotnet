@@ -37,11 +37,11 @@ namespace SocketTester
             conn.Keys.CopyTo(keys, 0);
             foreach (string str in keys)
                 System.Diagnostics.Debug.WriteLine(str + " --> " + (conn[str]==null ? "" : conn[str]));
-            string pin = conn.PlayAndGetDigits(4, 10, 3, 3000, "#","/opt/freeswitch/sounds/en/us/callie/conference/8000/conf-pin.wav" ,null, "\\d+", null);
+            string pin = conn.PlayAndGetDigits(4, 10, 3, 3000, "#","sounds/en/us/callie/conference/8000/conf-pin.wav" ,null, "\\d+", null);
             Console.WriteLine("The pin entered was: " + (pin == null ? "NO PIN" : pin));
             if (pin == "8888")
             {
-                conn.PlayAudioFile("/opt/freeswitch/sounds/music/48000/ponce-preludio-in-e-major.wav", false);
+                conn.PlayAudioFile("sounds/music/48000/ponce-preludio-in-e-major.wav", false);
                 Thread.Sleep(10000);
                 if (conn.IsExtensionLive("1001", conn.Domain))
                 {
@@ -90,8 +90,8 @@ namespace SocketTester
             }
             else
             {
-                conn.PlayAudioFile("/opt/freeswitch/sounds/en/us/callie/conference/8000/conf-bad-pin.wav", true);
-                conn.PlayAudioFile("/opt/freeswitch/sounds/en/us/callie/conference/8000/conf-goodbye.wav", true);
+                conn.PlayAudioFile("sounds/en/us/callie/conference/8000/conf-bad-pin.wav", true);
+                conn.PlayAudioFile("sounds/en/us/callie/conference/8000/conf-goodbye.wav", true);
             }
             if (!conn.IsHungUp)
                 conn.Hangup();

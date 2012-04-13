@@ -365,9 +365,15 @@ namespace Org.Reddragonit.FreeSwitchSockets
             {
             }
             buffer = new byte[BUFFER_SIZE];
-            _socket.BeginReceive(buffer, 0, BUFFER_SIZE,
-                                 SocketFlags.None, new AsyncCallback(ReceiveCallback),
-                                 null);
+            try
+            {
+                _socket.BeginReceive(buffer, 0, BUFFER_SIZE,
+                                     SocketFlags.None, new AsyncCallback(ReceiveCallback),
+                                     null);
+            }
+            catch (Exception e)
+            {
+            }
             ProcessMessageList();
         }
 

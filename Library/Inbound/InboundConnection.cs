@@ -43,8 +43,17 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
         public InboundConnection(TcpClient client)
             : base(client.Client)
         {
-            _isHungup = false;
-            _awaitingCommands = new Queue<ManualResetEvent>();
+            //bug fix for missing context variable, using Caller-Context as precation when variable is missing.
+            if ((this["Caller-Context"] != null) && (this.Context == null))
+                this.Context = this["Caller-Context"];
+            //bug fix for missing domain variable
+            if ((this["Channel-Name"] != null) && (this.Domain == null))
+            {
+                string dom = this["Channel-Name"];
+                dom = dom.Substring(dom.IndexOf("@")+1);
+                dom = dom.Substring(0, dom.IndexOf(":"));
+                this.Domain = dom;
+            }
         }
 
         private string RandomVariable
@@ -305,10 +314,11 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
                     if (asm["Job-UUID"] == null)
                     {
                         ManualResetEvent mre = null;
-                        Monitor.Enter(_awaitingCommands);
-                        if (_awaitingCommands.Count > 0)
-                            mre = _awaitingCommands.Dequeue();
-                        Monitor.Exit(_awaitingCommands);
+                        lock (_awaitingCommands)
+                        {
+                            if (_awaitingCommands.Count > 0)
+                                mre = _awaitingCommands.Dequeue();
+                        }
                         if (mre != null)
                             mre.Set();
                     }
@@ -355,6 +365,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
         #region INIT
         protected override void _preSocketReady()
         {
+            _isHungup = false;
+            _awaitingCommands = new Queue<ManualResetEvent>();
             BufferedStream _in = new BufferedStream(new NetworkStream(socket));
             _sendCommand("connect");
             _properties = ASocketMessage.ParseProperties(ReadMessage(_in));
