@@ -51,8 +51,10 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             if ((this["Channel-Name"] != null) && (this.Domain == null))
             {
                 string dom = this["Channel-Name"];
-                dom = dom.Substring(dom.IndexOf("@") + 1);
-                dom = dom.Substring(0, dom.IndexOf(":"));
+                if (dom.Contains("@"))
+                    dom = dom.Substring(dom.IndexOf("@") + 1);
+                if (dom.Contains(":"))
+                    dom = dom.Substring(0, dom.IndexOf(":"));
                 this.Domain = dom;
             }
         }
