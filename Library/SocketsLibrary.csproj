@@ -37,6 +37,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ASocket.cs" />
+    <Compile Include="DialableNumber.cs" />
     <Compile Include="Messages\ASocketMessage.cs" />
     <Compile Include="Messages\CommandReplyMessage.cs" />
     <Compile Include="Inbound\InboundConnection.cs" />

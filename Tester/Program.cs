@@ -31,6 +31,7 @@ namespace SocketTester
 
         public static void ProcessConnection(InboundConnection conn)
         {
+            conn.BindDigitAction("", "##", "", null, null, null);
             SocketEvent ev;
             conn.Answer();
             string[] keys = new string[conn.Keys.Count];
@@ -43,9 +44,9 @@ namespace SocketTester
             {
                 conn.PlayAudioFile("sounds/music/48000/ponce-preludio-in-e-major.wav", false);
                 Thread.Sleep(10000);
-                if (conn.IsExtensionLive("1001", conn.Domain))
+                if (conn.IsExtensionLive(new sDomainExtensionPair("1001", conn.Domain)))
                 {
-                    ev = conn.BridgeToExtension("1001", conn.Domain, true);
+                    ev = conn.BridgeToExtension(new sDomainExtensionPair("1001", conn.Domain), true);
                     if (ev == null)
                         Console.WriteLine("Null event returned from bridge");
                     else
@@ -58,7 +59,7 @@ namespace SocketTester
                         if (ev["originate_disposition"] == "USER_NOT_REGISTERED")
                         {
                             Console.WriteLine("Bridging to voicemail for unregistered user.");
-                            ev = conn.Voicemail(conn.Context, conn.Domain, "1001");
+                            ev = conn.Voicemail(conn.Context, new sDomainExtensionPair(conn.Domain, "1001"));
                             if (ev == null)
                                 Console.WriteLine("Null event returned from voicemail.");
                             else
@@ -75,7 +76,7 @@ namespace SocketTester
                 else
                 {
                     Console.WriteLine("Extension 1001 is not connected, bridging to voicemail");
-                    ev = conn.Voicemail(conn.Context, conn.Domain, "1001");
+                    ev = conn.Voicemail(conn.Context, new sDomainExtensionPair(conn.Domain, "1001"));
                     if (ev == null)
                         Console.WriteLine("Null event returned from voicemail.");
                     else
