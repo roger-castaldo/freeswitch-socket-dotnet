@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 {
-    public struct sDomainExtensionPair
+    public struct sDomainExtensionPair : IComparable
     {
         private string _extension;
         public string Extension
@@ -23,6 +23,18 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             _extension = extension;
             _domain = domain;
         }
+
+        #region IComparable Members
+
+        public int CompareTo(object obj)
+        {
+            sDomainExtensionPair dep = (sDomainExtensionPair)obj;
+            if (dep.Domain == Domain)
+                return Extension.CompareTo(dep.Extension);
+            return Domain.CompareTo(dep.Domain);
+        }
+
+        #endregion
     }
 
     public struct sGatewayNumberPair

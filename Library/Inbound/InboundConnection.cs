@@ -13,8 +13,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
     public class InboundConnection : ASocket
     {
 
-        private const string REGISTRATIONS_FOR_PROFILE_CHECK_COMMAND = "sofia status profile {0} reg";
-        private const string REGEX_EXTENSION_CHECK = "^MWI-Account:\\s+{0}@{1}\\s*$";
+        private const string REGISTRATIONS_CHECK_COMMAND = "sofia_count_reg {0}@{1}";
 
         private const string RANDOM_VAR_NAME_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_";
         private const string EXECUTE_COMPLETE_EVENT_NAME = "CHANNEL_EXECUTE_COMPLETE";
@@ -102,8 +101,9 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 
         public bool IsExtensionLive(sDomainExtensionPair extension)
         {
-            string apiRes = _IssueAPICommand(string.Format(REGISTRATIONS_FOR_PROFILE_CHECK_COMMAND, extension.Domain), true);
-            return new Regex(string.Format(REGEX_EXTENSION_CHECK, extension.Extension, extension.Domain), RegexOptions.Compiled | RegexOptions.ECMAScript).Matches(extension.Extension).Count > 0;
+            //patched to use to sofia_reg_count command instead of a more complicated command for ease of use, return 0 for not registered or 1+ for an extension being registered
+            string apiRes = _IssueAPICommand(string.Format(REGISTRATIONS_CHECK_COMMAND,extension.Extension, extension.Domain), true);
+            return int.Parse(apiRes) > 0;
         }
 
         public void AttendedTransfer(sDomainExtensionPair extension, bool eventLock)
