@@ -91,15 +91,17 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
                 if (asm is SocketEvent)
                 {
                     if (_eventDelegate != null)
-                        _eventDelegate.BeginInvoke((SocketEvent)asm, null, null);
+                        _eventDelegate.BeginInvoke((SocketEvent)asm,new AsyncCallback(_endInvoke),null);
                 }
                 else if (asm is SocketLogMessage)
                 {
                     if (_logDelegate != null)
-                        _logDelegate.BeginInvoke((SocketLogMessage)asm, null, null);
+                        _logDelegate.BeginInvoke((SocketLogMessage)asm, new AsyncCallback(_endInvoke), null);
                 }
             }
         }
+
+        private void _endInvoke(IAsyncResult res) { }
 
         protected override void _close()
         {
