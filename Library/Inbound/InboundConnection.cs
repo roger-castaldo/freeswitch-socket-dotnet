@@ -372,7 +372,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 
         public void BridgeExport(string variableName, string value, bool BLegOnly)
         {
-            ExecuteApplication("bride_export", (BLegOnly ? "nolocal:" : "") + variableName + "=" + value, false);
+            ExecuteApplication("bridge_export", (BLegOnly ? "nolocal:" : "") + variableName + "=" + value, false);
         }
 
         public void EavesDrop(string uuid, string requiredGroup,

@@ -212,6 +212,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             _preSocketReady();
             Thread th = new Thread(new ThreadStart(BackgroundRun));
+            th.IsBackground = true;
             th.Start();
         }
 
