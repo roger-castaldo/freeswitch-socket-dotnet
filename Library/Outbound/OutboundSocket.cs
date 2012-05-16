@@ -88,20 +88,24 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
             while (messages.Count > 0)
             {
                 ASocketMessage asm = messages.Dequeue();
-                if (asm is SocketEvent)
-                {
-                    if (_eventDelegate != null)
-                        _eventDelegate.BeginInvoke((SocketEvent)asm,new AsyncCallback(_endInvoke),null);
-                }
-                else if (asm is SocketLogMessage)
-                {
-                    if (_logDelegate != null)
-                        _logDelegate.BeginInvoke((SocketLogMessage)asm, new AsyncCallback(_endInvoke), null);
-                }
+                new Thread(new ParameterizedThreadStart(_processMessage)).Start(asm);
             }
         }
 
-        private void _endInvoke(IAsyncResult res) { }
+        private void _processMessage(object obj)
+        {
+            ASocketMessage asm = (ASocketMessage)obj;
+            if (asm is SocketEvent)
+            {
+                if (_eventDelegate != null)
+                    _eventDelegate.Invoke((SocketEvent)asm);
+            }
+            else if (asm is SocketLogMessage)
+            {
+                if (_logDelegate != null)
+                    _logDelegate.Invoke((SocketLogMessage)asm);
+            }
+        }
 
         protected override void _close()
         {
