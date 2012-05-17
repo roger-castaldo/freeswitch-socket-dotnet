@@ -78,7 +78,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
                 return str1.Equals(str2);
         }
 
-        private const int BUFFER_SIZE = 500;
         private const string MESSAGE_END_STRING = "\n\n";
         private const string REGISTER_EVENT_COMMAND = "event {0}";
         private const string REMOVE_EVENT_COMMAND = "nixevent {0}";
@@ -124,7 +123,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private List<string> _splitMessages;
         private List<string> _processingMessages;
         private bool _processing = false;
-        private byte[] buffer;
         private List<sEventHandler> _handlers;
         private Queue<byte[]> _awaitingCommands;
         private bool _exit = false;
@@ -137,6 +135,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private Dictionary<string, ManualResetEvent> _commandThreads;
         private Dictionary<string, string> _awaitingCommandReturns;
         private Thread _backgroundProcessor;
+        private Thread _backgroundDataReader;
         private ManualResetEvent _mreMessageWaiting;
 
         protected ASocket(Socket socket)
@@ -157,14 +156,14 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _ipAddress = ((IPEndPoint)_socket.RemoteEndPoint).Address;
             _port = ((IPEndPoint)_socket.RemoteEndPoint).Port;
             _preSocketReady();
-            buffer = new byte[BUFFER_SIZE];
             _mreMessageWaiting = new ManualResetEvent(false);
             _backgroundProcessor = new Thread(new ThreadStart(_MessageProcessorStart));
             _backgroundProcessor.IsBackground = true;
             _backgroundProcessor.Start();
-            _socket.BeginReceive(buffer, 0, BUFFER_SIZE,
-                                 SocketFlags.None, new AsyncCallback(ReceiveCallback),
-                                 null);
+            _socket.ReceiveTimeout = 1000;
+            _backgroundDataReader = new Thread(new ThreadStart(_SocketDataReaderStart));
+            _backgroundDataReader.IsBackground = true;
+            _backgroundDataReader.Start();
             this.RegisterEvent(BACKGROUND_API_RESPONSE_EVENT);
         }
 
@@ -218,8 +217,8 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             _mreMessageWaiting = new ManualResetEvent(false);
             _backgroundProcessor = new Thread(new ThreadStart(_MessageProcessorStart));
-            _backgroundProcessor.IsBackground = true;
             _backgroundProcessor.Start();
+            _socket.ReceiveTimeout = 1000;
             _preSocketReady();
             Thread th = new Thread(new ThreadStart(BackgroundRun));
             th.IsBackground = true;
@@ -236,11 +235,9 @@ namespace Org.Reddragonit.FreeSwitchSockets
                     {
                         _socket.Connect(_ipAddress, _port);
                         byte[] data = ASCIIEncoding.ASCII.GetBytes(string.Format(AUTH_COMMAND, _password) + MESSAGE_END_STRING);
-                        _socket.BeginSend(data, 0, data.Length, SocketFlags.None, new AsyncCallback(SendComplete), null);
-                        buffer = new byte[BUFFER_SIZE];
-                        _socket.BeginReceive(buffer, 0, BUFFER_SIZE,
-                                             SocketFlags.None, new AsyncCallback(ReceiveCallback),
-                                             null);
+                        _socket.Send(data, 0, data.Length, SocketFlags.None);
+                        _backgroundDataReader = new Thread(new ThreadStart(_SocketDataReaderStart));
+                        _backgroundDataReader.Start();
                         _isConnected = true;
                     }
                     catch (Exception e)
@@ -276,14 +273,14 @@ namespace Org.Reddragonit.FreeSwitchSockets
                 lock (_awaitingCommands)
                 {
                     if (_isConnected)
-                        _socket.BeginSend(commandBytes, 0, commandBytes.Length, SocketFlags.None, new AsyncCallback(SendComplete), null);
+                        _socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
                     else
                         _awaitingCommands.Enqueue(commandBytes);
                 }
             }
             else
             {
-                _socket.BeginSend(commandBytes, 0, commandBytes.Length, SocketFlags.None, new AsyncCallback(SendComplete), null);
+                _socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
             }
         }
 
@@ -341,20 +338,22 @@ namespace Org.Reddragonit.FreeSwitchSockets
         protected abstract void _close();
         protected abstract void _preSocketReady();
 
-        private void SendComplete(IAsyncResult ar)
+        private void _SocketDataReaderStart()
         {
-            try
+            Thread.CurrentThread.IsBackground = true;
+            Thread.CurrentThread.Name = "FreeSwitchSocketDataReader_" + Thread.CurrentThread.ManagedThreadId.ToString();
+            byte[] buffer;
+            while (!_exit)
             {
-                _socket.EndSend(ar);
-            }
-            catch (Exception e) { }
-        }
-
-        private void ReceiveCallback(IAsyncResult ar)
-        {
-            try
-            {
-                int bytesRead = _socket.EndReceive(ar);
+                buffer =new byte[500];
+                int bytesRead = 0;
+                try
+                {
+                    bytesRead = _socket.Receive(buffer);
+                }
+                catch (Exception e) {
+                    bytesRead = 0;
+                }
                 if (bytesRead > 0)
                 {
                     lock (_textReceived)
@@ -375,19 +374,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
                         }
                     }
                 }
-            }
-            catch (Exception e)
-            {
-            }
-            buffer = new byte[BUFFER_SIZE];
-            try
-            {
-                _socket.BeginReceive(buffer, 0, BUFFER_SIZE,
-                                     SocketFlags.None, new AsyncCallback(ReceiveCallback),
-                                     null);
-            }
-            catch (Exception e)
-            {
             }
         }
 
