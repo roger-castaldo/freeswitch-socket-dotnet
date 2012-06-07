@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Net.Sockets;
 using System.Net;
+using Org.Reddragonit.FreeSwitchSockets.MonoFix;
 
 namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 {
@@ -22,14 +23,14 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 
         public delegate void delProcessConnection(InboundConnection conn);
 
-        private TcpListener _listener;
+        private WrappedTcpListener _listener;
         private delProcessConnection _connectionProcessor;
 
         public InboundListener(IPAddress ip,int port,delProcessConnection connectionProcessor)
         {
             _ip = ip;
             _port = port;
-            _listener = new TcpListener(ip, port);
+            _listener = new WrappedTcpListener(new TcpListener(ip, port));
             _listener.Start();
             _listener.BeginAcceptSocket(new AsyncCallback(RecieveClient), null);
             _connectionProcessor = connectionProcessor;
