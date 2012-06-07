@@ -37,12 +37,15 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ASocket.cs" />
+    <Compile Include="Constants.cs" />
     <Compile Include="DialableNumber.cs" />
     <Compile Include="Messages\ASocketMessage.cs" />
     <Compile Include="Messages\CommandReplyMessage.cs" />
     <Compile Include="Inbound\InboundConnection.cs" />
     <Compile Include="Inbound\InboundListener.cs" />
     <Compile Include="Inbound\Structures.cs" />
+    <Compile Include="MonoFix\WrappedTcpListener.cs" />
+    <Compile Include="MonoFix\WrappedTcpListenerAsyncResult.cs" />
     <Compile Include="MT19937.cs" />
     <Compile Include="Enums.cs" />
     <Compile Include="Messages\SocketEvent.cs" />
