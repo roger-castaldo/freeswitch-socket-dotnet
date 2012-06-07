@@ -2,11 +2,24 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
+using System.Net.Sockets;
 
 namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
 {
     internal class WrappedTcpListenerAsyncResult : IAsyncResult
     {
+        private Socket _socket;
+        public Socket Socket
+        {
+            get { return _socket; }
+        }
+
+        private TcpClient _client;
+        public TcpClient Client
+        {
+            get { return _client; }
+        }
+
         public WrappedTcpListenerAsyncResult(object asyncState, WaitHandle waitHandle)
         {
             _asyncState = asyncState;
@@ -18,9 +31,16 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
             _isCompleted = true;
         }
 
-        internal void Complete()
+        internal void Complete(Socket socket)
         {
             _isCompleted = true;
+            _socket = socket;
+        }
+
+        internal void Complete(TcpClient client)
+        {
+            _isCompleted = true;
+            _client = client;
         }
 
         #region IAsyncResult Members

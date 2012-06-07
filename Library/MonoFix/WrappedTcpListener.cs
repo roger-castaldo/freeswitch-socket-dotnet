@@ -15,8 +15,6 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
         private bool _closed=false;
         private Thread _thread;
         private ManualResetEvent _resBeginAccept;
-        private Socket _socket;
-        private TcpClient _client;
         private AsyncCallback _callBack;
         private WrappedTcpListenerAsyncResult _result;
         private bool _accepting;
@@ -46,6 +44,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
                 _resBeginAccept.Reset();
                 if (!_closed)
                 {
+                    Socket _socket = null;
+                    TcpClient _client = null;
                     try
                     {
                         _accepting = true;
@@ -61,17 +61,27 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
                     }
                     if (!_closed)
                     {
-                        _result.Complete();
+                        if (_acceptSocket)
+                            _result.Complete(_socket);
+                        else
+                            _result.Complete(_client);
                         _waitHandle.Set();
-                        try
-                        {
-                            if (_callBack != null)
-                                _callBack.Invoke(_result);
-                        }
-                        catch (Exception e) { }
+                        ThreadPool.QueueUserWorkItem(new WaitCallback(_ProcCallBack), new object[] { _callBack, _result });
                     }
                 }
             }
+        }
+
+        private void _ProcCallBack(object obj)
+        {
+            AsyncCallback callBack = (AsyncCallback)((object[])obj)[0];
+            WrappedTcpListenerAsyncResult result = (WrappedTcpListenerAsyncResult)((object[])obj)[1];
+            try
+            {
+                if (callBack != null)
+                    callBack.Invoke(result);
+            }
+            catch (Exception e) { }
         }
 
         public void Start(int backlog)
@@ -90,6 +100,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
                 return _listener.BeginAcceptSocket(callback, state);
             else
             {
+                if (_result != null)
+                    throw new Exception("Unable to BeginAcceptSocket, already asynchronously waiting");
                 _acceptSocket = true;
                 _callBack = callback;
                 _result = new WrappedTcpListenerAsyncResult(state, _waitHandle);
@@ -105,7 +117,12 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
             if (!_override)
                 return _listener.EndAcceptSocket(asyncResult);
             else
-                return _socket;
+            {
+                if (asyncResult==null)
+                    throw new Exception("Unable to process null asyncResult");
+                _result = null;
+                return ((WrappedTcpListenerAsyncResult)asyncResult).Socket;
+            }
         }
 
         public IAsyncResult BeginAcceptTcpClient(AsyncCallback callback, object state)
@@ -114,6 +131,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
                 return _listener.BeginAcceptTcpClient(callback, state);
             else
             {
+                if (_result != null)
+                    throw new Exception("Unable to BeginAcceptTcpClient, already asynchronously waiting");
                 _acceptSocket = false;
                 _callBack = callback;
                 _result = new WrappedTcpListenerAsyncResult(state, _waitHandle);
@@ -129,7 +148,12 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
             if (!_override)
                 return _listener.EndAcceptTcpClient(asyncResult);
             else
-                return _client;
+            {
+                if (asyncResult==null)
+                    throw new Exception("Unable to process null asyncResult");
+                _result = null;
+                return ((WrappedTcpListenerAsyncResult)asyncResult).Client;
+            }
         }
 
         public void Stop()
