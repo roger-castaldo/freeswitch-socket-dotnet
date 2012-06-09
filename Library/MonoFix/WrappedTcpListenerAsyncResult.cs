@@ -20,9 +20,24 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
             get { return _client; }
         }
 
-        public WrappedTcpListenerAsyncResult(object asyncState, WaitHandle waitHandle)
+        private AsyncCallback _callBack;
+        public AsyncCallback CallBack
+        {
+            get { return _callBack; }
+        }
+
+        private bool _acceptSocket;
+        public bool AcceptSocket
+        {
+            get { return _acceptSocket; }
+        }
+
+        public WrappedTcpListenerAsyncResult(object asyncState, WaitHandle waitHandle, AsyncCallback callback,bool acceptSocket)
         {
             _asyncState = asyncState;
+            _waitHandle = waitHandle;
+            _callBack = callback;
+            _acceptSocket = acceptSocket;
         }
 
         internal void CompleteSynchronously()
