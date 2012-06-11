@@ -9,6 +9,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
 {
     internal class WrappedTcpListener
     {
+        private int? _backlog=null;
         private TcpListener _listener;
         private bool _override;
         private ManualResetEvent _waitHandle;
@@ -44,7 +45,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
             catch (ThreadAbortException tae)
             {
                 result = null;
-                throw tae;
+                return;
             }
             catch (Exception e)
             {
@@ -83,6 +84,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
 
         public void Start(int backlog)
         {
+            _backlog = backlog;
             _listener.Start(backlog);
         }
 
@@ -120,7 +122,26 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
                 if (asyncResult == null)
                     throw new Exception("Unable to handle null async result.");
                 WrappedTcpListenerAsyncResult result = (WrappedTcpListenerAsyncResult)asyncResult;
-                Socket ret = result.Socket;
+                Socket ret = null;
+                if (((int)(_thread.ThreadState & ThreadState.Unstarted) != (int)ThreadState.Unstarted)
+                        && ((int)(_thread.ThreadState & ThreadState.Stopped) != (int)ThreadState.Stopped))
+                {
+                    try
+                    {
+                        _thread.Abort();
+                    }
+                    catch (Exception e)
+                    {
+                    }
+                    _listener.Stop();
+                    _thread.Join();
+                    if (_backlog.HasValue)
+                        _listener.Start(_backlog.Value);
+                    else
+                        _listener.Start();
+                }
+                else
+                    ret = result.Socket;
                 result = null;
                 return ret;
             }
@@ -155,7 +176,26 @@ namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
                 if (asyncResult == null)
                     throw new Exception("Unable to handle null async result.");
                 WrappedTcpListenerAsyncResult result = (WrappedTcpListenerAsyncResult)asyncResult;
-                TcpClient ret = result.Client;
+                TcpClient ret = null;
+                if (((int)(_thread.ThreadState & ThreadState.Unstarted) != (int)ThreadState.Unstarted)
+                        && ((int)(_thread.ThreadState & ThreadState.Stopped) != (int)ThreadState.Stopped))
+                {
+                    try
+                    {
+                        _thread.Abort();
+                    }
+                    catch (Exception e)
+                    {
+                    }
+                    _listener.Stop();
+                    _thread.Join();
+                    if (_backlog.HasValue)
+                        _listener.Start(_backlog.Value);
+                    else
+                        _listener.Start();
+                }
+                else
+                    ret = result.Client;
                 result = null;
                 return ret;
             }
