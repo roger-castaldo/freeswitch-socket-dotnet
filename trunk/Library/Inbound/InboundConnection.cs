@@ -90,7 +90,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 
         public void Sleep(int milliSeconds)
         {
-            ExecuteApplication("sleep", "data=" + milliSeconds.ToString(), false);
+            ExecuteApplication("sleep", milliSeconds.ToString(), false);
             Thread.Sleep(milliSeconds);
         }
 
@@ -295,7 +295,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 
         public void FIFO_Out(string queue, bool wait, string foundSound, string onHold, bool eventLock)
         {
-            ExecuteApplication("fifo", queue + " out " + (wait ? "wait" : "nowait") + foundSound + (onHold == null ? " " + onHold : ""), eventLock);
+            ExecuteApplication("fifo", queue + " out " + (wait ? "wait" : "nowait")+" " + foundSound + (onHold == null ? " " + onHold : ""), eventLock);
         }
         #endregion
         #region Settings
@@ -457,9 +457,10 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             ExecuteApplication("endless_playback", filePath, eventLock);
         }
 
-        public string PlayAndGetDigits(int minDigits, int maxDigits, int tries, long timeout, string terminators, string file, string invalidFile, string regexp, int? digitTimeout)
+        public string PlayAndGetDigits(int minDigits, int maxDigits, int tries, long timeout, string terminators, string file, string invalidFile,string var, string regexp, int? digitTimeout)
         {
-            string var = RandomVariable;
+            if (var==null)
+                var = RandomVariable;
             SocketEvent ev = ExecuteApplication("play_and_get_digits", minDigits.ToString() + " " + maxDigits.ToString() + " " + tries.ToString() + " " + timeout.ToString() + " " + terminators + " " + file + " " + (invalidFile != null ? invalidFile : "silence_stream://250") + " " + var + " " + (regexp == null ? "\\d+" : regexp) + " " + (digitTimeout.HasValue ? digitTimeout.ToString() : ""), true);
             string ret = ev[var];
             SetVariable(var, "");
@@ -677,7 +678,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 
         public void DetectSpeech_GrammarsAllOff(bool eventLock)
         {
-            ExecuteApplication("detect_speech", "grammarsalloff", eventLock);
+            ExecuteApplication("detect_speech", "grammaralloff", eventLock);
         }
 
         public void DetectSpeech_NoGrammar(string grammarName, bool eventLock)
@@ -697,7 +698,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 
         public void DetectSpeech_Resume(bool eventLock)
         {
-            ExecuteApplication("detect_speech", "resumse", eventLock);
+            ExecuteApplication("detect_speech", "resume", eventLock);
         }
 
         public void DetectSpeech_StartInputTimers(bool eventLock)
