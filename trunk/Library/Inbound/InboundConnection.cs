@@ -121,6 +121,13 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             return ExecuteApplication("check_acl", address + " " + acl + (hangupcause == null ? "" : "  " + hangupcause), true);
         }
 
+        public bool Acl(string address, string acl, string variableName)
+        {
+            SocketEvent se = ExecuteApplication("acl", address + " " + acl, true);
+            this[variableName] = se.Message;
+            return bool.Parse(se.Message);
+        }
+
         public SocketEvent DB(string command, bool eventLock)
         {
             return ExecuteApplication("db", command, eventLock);
