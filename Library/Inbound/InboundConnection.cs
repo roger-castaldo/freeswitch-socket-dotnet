@@ -6,7 +6,6 @@ using System.IO;
 using System.Threading;
 using Org.Reddragonit.FreeSwitchSockets.Messages;
 using System.Text.RegularExpressions;
-using Org.Reddragonit.FreeSwitch.Sockets;
 
 namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 {

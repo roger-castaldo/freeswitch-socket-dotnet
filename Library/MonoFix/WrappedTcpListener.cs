@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text;
 using System.Net.Sockets;
 using System.Threading;
-using Org.Reddragonit.FreeSwitch.Sockets;
 
 namespace Org.Reddragonit.FreeSwitchSockets.MonoFix
 {
