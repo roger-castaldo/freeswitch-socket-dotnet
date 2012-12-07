@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Org.Reddragonit.FreeSwitch.Sockets
+namespace Org.Reddragonit.FreeSwitchSockets
 {
     public class DialableNumber : IComparable
     {

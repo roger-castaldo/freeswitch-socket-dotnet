@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Reflection;
 
-namespace Org.Reddragonit.FreeSwitch.Sockets
+namespace Org.Reddragonit.FreeSwitchSockets
 {
     internal class Constants
     {
