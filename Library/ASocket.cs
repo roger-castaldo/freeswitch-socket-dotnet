@@ -349,9 +349,13 @@ namespace Org.Reddragonit.FreeSwitchSockets
                 int bytesRead = 0;
                 try
                 {
-                    bytesRead = _socket.Receive(buffer);
+                    if (_socket.Available > 0)
+                        bytesRead = _socket.Receive(buffer);
+                    else
+                        bytesRead = 0;
                 }
-                catch (Exception e) {
+                catch (Exception e)
+                {
                     bytesRead = 0;
                 }
                 if (bytesRead > 0)
