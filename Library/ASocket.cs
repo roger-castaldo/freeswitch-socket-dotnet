@@ -378,6 +378,8 @@ namespace Org.Reddragonit.FreeSwitchSockets
                         }
                     }
                 }
+                else
+                    Thread.Sleep(100);
             }
         }
 
