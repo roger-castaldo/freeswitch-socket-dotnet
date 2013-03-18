@@ -21,6 +21,13 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             get { return _port; }
         }
 
+        private ASocket.delDisposeInvalidMessage _disposeInvalidMessage;
+        public ASocket.delDisposeInvalidMessage DisposeInvalidMessage
+        {
+            get { return _disposeInvalidMessage; }
+            set { _disposeInvalidMessage = value; }
+        }
+
         public delegate void delProcessConnection(InboundConnection conn);
 
         private WrappedTcpListener _listener;
@@ -59,6 +66,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             if (clnt != null)
             {
                 InboundConnection conn = new InboundConnection(clnt);
+                conn.DisposeInvalidMessage = _disposeInvalidMessage;
                 _connectionProcessor.Invoke(conn);
             }
         }

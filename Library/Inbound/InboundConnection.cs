@@ -463,6 +463,11 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
             ExecuteApplication("endless_playback", filePath, eventLock);
         }
 
+        public string PlayAndGetDigits(int minDigits, int maxDigits, int tries, long timeout, string terminators, string file, string invalidFile, string regexp, int? digitTimeout)
+        {
+            return PlayAndGetDigits(minDigits, maxDigits, tries, timeout, terminators, file, invalidFile, null, regexp, digitTimeout);
+        }
+
         public string PlayAndGetDigits(int minDigits, int maxDigits, int tries, long timeout, string terminators, string file, string invalidFile,string var, string regexp, int? digitTimeout)
         {
             if (var==null)
@@ -876,6 +881,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
         {
             get
             {
+                if (name == null)
+                    return null;
                 string ret = null;
                 lock (_properties)
                 {

@@ -81,11 +81,14 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private const string MESSAGE_END_STRING = "\n\n";
         private const string REGISTER_EVENT_COMMAND = "event {0}";
         private const string REMOVE_EVENT_COMMAND = "nixevent {0}";
+        private const string EVENT_FILTER_COMMAND = "filter {0} {1}";
+        private const string REMOVE_EVENT_FILTER_COMMAND = "filter delete {0} {1}";
         private const string AUTH_COMMAND = "auth {0}";
         private const string BACKGROUND_API_RESPONSE_EVENT = "SWITCH_EVENT_BACKGROUND_JOB";
         private const string API_ISSUE_COMMAND = "bgapi {0}";
 
         public delegate void delProcessEventMessage(SocketEvent message);
+        public delegate void delDisposeInvalidMessage(string message);
 
         private Socket _socket;
         protected Socket socket
@@ -137,6 +140,12 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private Thread _backgroundProcessor;
         private Thread _backgroundDataReader;
         private ManualResetEvent _mreMessageWaiting;
+        private delDisposeInvalidMessage _disposeInvalidMesssage;
+        public delDisposeInvalidMessage DisposeInvalidMessage
+        {
+            get { return _disposeInvalidMesssage; }
+            set { _disposeInvalidMesssage = value; }
+        }
 
         protected ASocket(Socket socket)
         {
@@ -334,6 +343,16 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _sendCommand(string.Format(REMOVE_EVENT_COMMAND, eventName));
         }
 
+        public void RegisterEventFilter(string fieldName, string fieldValue)
+        {
+            _sendCommand(string.Format(EVENT_FILTER_COMMAND, fieldName, fieldValue));
+        }
+
+        public void UnRegisterEventFilter(string fieldName, string fieldValue)
+        {
+            _sendCommand(string.Format(REMOVE_EVENT_FILTER_COMMAND, fieldName, fieldValue));
+        }
+
         protected abstract void _processMessageQueue(Queue<ASocketMessage> messages);
         protected abstract void _close();
         protected abstract void _preSocketReady();
@@ -408,6 +427,22 @@ namespace Org.Reddragonit.FreeSwitchSockets
                             _processingMessages.RemoveAt(0);
                             Dictionary<string, string> pars = ASocketMessage.ParseProperties(origMsg);
                             string subMsg = "";
+                            //fail safe for delayed header
+                            if (!pars.ContainsKey("Content-Type"))
+                            {
+                                if (pars.ContainsKey("Event-Name"))
+                                {
+                                    _processingMessages.Insert(0, origMsg);
+                                    origMsg = "Content-Type:text/event-plain\nContent-Length:" + origMsg.Length.ToString() + "\n";
+                                    pars = ASocketMessage.ParseProperties(origMsg);
+                                }
+                                else
+                                {
+                                    if (DisposeInvalidMessage != null)
+                                        DisposeInvalidMessage(origMsg);
+                                    break;
+                                }
+                            }
                             if (pars.ContainsKey("Content-Length"))
                             {
                                 if (_processingMessages.Count > 0)
@@ -423,39 +458,47 @@ namespace Org.Reddragonit.FreeSwitchSockets
                             }
                             if (pars["Content-Type"] == "text/event-plain")
                             {
-                                SocketEvent se;
-                                se = new SocketEvent(subMsg);
-                                if (se["Content-Length"] != null)
+                                if (subMsg == "")
                                 {
-                                    if (_processingMessages.Count > 0)
-                                    {
-                                        se.Message = _processingMessages[0];
-                                        _processingMessages.RemoveAt(0);
-                                    }
-                                    else
-                                    {
-                                        _processingMessages.Insert(0, origMsg);
-                                        _processingMessages.Insert(1, subMsg);
-                                        break;
-                                    }
+                                    _processingMessages.Insert(0, origMsg);
+                                    break;
                                 }
-                                if (se.EventName == "BACKGROUND_JOB")
+                                else
                                 {
-                                    lock (_commandThreads)
+                                    SocketEvent se;
+                                    se = new SocketEvent(subMsg);
+                                    if (se["Content-Length"] != null)
                                     {
-                                        if (_commandThreads.ContainsKey(se["Job-UUID"]))
+                                        if (_processingMessages.Count > 0)
                                         {
-                                            lock (_awaitingCommandReturns)
-                                            {
-                                                _awaitingCommandReturns.Add(se["Job-UUID"], se.Message.Trim('\n'));
-                                            }
-                                            ManualResetEvent mre = _commandThreads[se["Job-UUID"]];
-                                            _commandThreads.Remove(se["Job-UUID"]);
-                                            mre.Set();
+                                            se.Message = _processingMessages[0];
+                                            _processingMessages.RemoveAt(0);
+                                        }
+                                        else
+                                        {
+                                            _processingMessages.Insert(0, origMsg);
+                                            _processingMessages.Insert(1, subMsg);
+                                            break;
                                         }
                                     }
+                                    if (se.EventName == "BACKGROUND_JOB")
+                                    {
+                                        lock (_commandThreads)
+                                        {
+                                            if (_commandThreads.ContainsKey(se["Job-UUID"]))
+                                            {
+                                                lock (_awaitingCommandReturns)
+                                                {
+                                                    _awaitingCommandReturns.Add(se["Job-UUID"], se.Message.Trim('\n'));
+                                                }
+                                                ManualResetEvent mre = _commandThreads[se["Job-UUID"]];
+                                                _commandThreads.Remove(se["Job-UUID"]);
+                                                mre.Set();
+                                            }
+                                        }
+                                    }
+                                    msgs.Enqueue(se);
                                 }
-                                msgs.Enqueue(se);
                             }
                             else if (pars["Content-Type"] == "command/reply")
                             {
