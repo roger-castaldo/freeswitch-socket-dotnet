@@ -17,12 +17,19 @@ namespace SocketTester
             Console.WriteLine("Starting up listener socket to test PIN obtainment...");
             InboundListener list = new InboundListener(IPAddress.Any, 8084,
                 new InboundListener.delProcessConnection(ProcessConnection));
+            list.DisposeInvalidMessage = new ASocket.delDisposeInvalidMessage(DisposeInvalidMessage);
             OutboundSocket os = new OutboundSocket(IPAddress.Loopback, 8021, "ClueCon", new ASocket.delProcessEventMessage(ProcessEvent),
                 null, null, null);
+            os.DisposeInvalidMessage += new ASocket.delDisposeInvalidMessage(DisposeInvalidMessage);
             os.RegisterEvent("all");
             Console.WriteLine("Hit Enter to exit...");
             Console.ReadLine();
             os.Close();
+        }
+
+        public static void DisposeInvalidMessage(string message){
+            Console.WriteLine("Disposing invalid message...");
+            Console.WriteLine(message);
         }
 
         public static void ProcessEvent(SocketEvent evnt){
