@@ -83,7 +83,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private const string REMOVE_EVENT_COMMAND = "nixevent {0}";
         private const string EVENT_FILTER_COMMAND = "filter {0} {1}";
         private const string REMOVE_EVENT_FILTER_COMMAND = "filter delete {0} {1}";
-        private const string AUTH_COMMAND = "auth {0}";
         private const string BACKGROUND_API_RESPONSE_EVENT = "SWITCH_EVENT_BACKGROUND_JOB";
         private const string API_ISSUE_COMMAND = "bgapi {0}";
 
@@ -106,6 +105,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
         protected bool IsConnected
         {
             get { return _isConnected; }
+            set { _isConnected = value; }
         }
 
         private FreeSwitchLogLevels _currentLevel = FreeSwitchLogLevels.CONSOLE;
@@ -125,13 +125,11 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private string _textReceived;
         private List<string> _splitMessages;
         private List<string> _processingMessages;
-        private bool _processing = false;
         private List<sEventHandler> _handlers;
-        private Queue<byte[]> _awaitingCommands;
+        protected Queue<byte[]> _awaitingCommands;
         private bool _exit = false;
         private IPAddress _ipAddress;
         private int _port;
-        private string _password;
         private string _currentCommandID;
         private delProcessEventMessage _eventProcessor;
         private Queue<ManualResetEvent> _awaitingCommandsEvents;
@@ -206,7 +204,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
             return "";
         }
 
-        protected ASocket(IPAddress ip, int port,string password)
+        protected ASocket(IPAddress ip, int port)
         {
             _textReceived = "";
             _processingMessages = new List<string>();
@@ -221,7 +219,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _isConnected = false;
             _ipAddress = ip;
             _port = port;
-            _password = password;
             _awaitingCommands = new Queue<byte[]>();
             _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             _mreMessageWaiting = new ManualResetEvent(false);
@@ -243,11 +240,8 @@ namespace Org.Reddragonit.FreeSwitchSockets
                     try
                     {
                         _socket.Connect(_ipAddress, _port);
-                        byte[] data = ASCIIEncoding.ASCII.GetBytes(string.Format(AUTH_COMMAND, _password) + MESSAGE_END_STRING);
-                        _socket.Send(data, 0, data.Length, SocketFlags.None);
                         _backgroundDataReader = new Thread(new ThreadStart(_SocketDataReaderStart));
                         _backgroundDataReader.Start();
-                        _isConnected = true;
                     }
                     catch (Exception e)
                     {
@@ -256,14 +250,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
                         Thread.Sleep(100);
                     else
                         break;
-                }
-            }
-            if (!_exit)
-            {
-                lock (_awaitingCommands)
-                {
-                    while (_awaitingCommands.Count > 0)
-                        _sendCommand(_awaitingCommands.Dequeue());
                 }
             }
         }
@@ -289,7 +275,19 @@ namespace Org.Reddragonit.FreeSwitchSockets
             }
             else
             {
-                _socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
+                try
+                {
+                    _socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
+                }
+                catch (Exception e)
+                {
+                    if (e is ObjectDisposedException)
+                    {
+                        _exit = true;
+                        _isConnected = false;
+                    }
+                    throw e;
+                }
             }
         }
 
@@ -430,106 +428,110 @@ namespace Org.Reddragonit.FreeSwitchSockets
                             //fail safe for delayed header
                             if (!pars.ContainsKey("Content-Type"))
                             {
-                                if (pars.ContainsKey("Event-Name"))
-                                {
-                                    _processingMessages.Insert(0, origMsg);
-                                    origMsg = "Content-Type:text/event-plain\nContent-Length:" + origMsg.Length.ToString() + "\n";
-                                    pars = ASocketMessage.ParseProperties(origMsg);
-                                }
-                                else
-                                {
-                                    if (DisposeInvalidMessage != null)
-                                        DisposeInvalidMessage(origMsg);
-                                    break;
-                                }
+                                if (_disposeInvalidMesssage != null)
+                                    _disposeInvalidMesssage(origMsg);
+                                break;
                             }
                             if (pars.ContainsKey("Content-Length"))
                             {
-                                if (_processingMessages.Count > 0)
+                                if (int.Parse(pars["Content-Length"]) > 0)
                                 {
-                                    subMsg = _processingMessages[0];
-                                    _processingMessages.RemoveAt(0);
-                                }
-                                else
-                                {
-                                    _processingMessages.Insert(0, origMsg);
-                                    break;
+                                    if (_processingMessages.Count > 0)
+                                    {
+                                        subMsg = _processingMessages[0];
+                                        _processingMessages.RemoveAt(0);
+                                    }
+                                    else
+                                    {
+                                        _processingMessages.Insert(0, origMsg);
+                                        break;
+                                    }
                                 }
                             }
-                            if (pars["Content-Type"] == "text/event-plain")
+                            switch (pars["Content-Type"])
                             {
-                                if (subMsg == "")
-                                {
-                                    _processingMessages.Insert(0, origMsg);
-                                    break;
-                                }
-                                else
-                                {
-                                    SocketEvent se;
-                                    se = new SocketEvent(subMsg);
-                                    if (se["Content-Length"] != null)
+                                case "text/event-plain":
+                                    if (subMsg == "")
                                     {
-                                        if (_processingMessages.Count > 0)
-                                        {
-                                            se.Message = _processingMessages[0];
-                                            _processingMessages.RemoveAt(0);
-                                        }
-                                        else
-                                        {
-                                            _processingMessages.Insert(0, origMsg);
-                                            _processingMessages.Insert(1, subMsg);
-                                            break;
-                                        }
+                                        _processingMessages.Insert(0, origMsg);
+                                        break;
                                     }
-                                    if (se.EventName == "BACKGROUND_JOB")
+                                    else
                                     {
-                                        lock (_commandThreads)
+                                        SocketEvent se;
+                                        se = new SocketEvent(subMsg);
+                                        if (se["Content-Length"] != null)
                                         {
-                                            if (_commandThreads.ContainsKey(se["Job-UUID"]))
+                                            if (_processingMessages.Count > 0)
                                             {
-                                                lock (_awaitingCommandReturns)
-                                                {
-                                                    _awaitingCommandReturns.Add(se["Job-UUID"], se.Message.Trim('\n'));
-                                                }
-                                                ManualResetEvent mre = _commandThreads[se["Job-UUID"]];
-                                                _commandThreads.Remove(se["Job-UUID"]);
-                                                mre.Set();
+                                                se.Message = _processingMessages[0];
+                                                _processingMessages.RemoveAt(0);
+                                            }
+                                            else
+                                            {
+                                                _processingMessages.Insert(0, origMsg);
+                                                _processingMessages.Insert(1, subMsg);
+                                                break;
                                             }
                                         }
+                                        if (se.EventName == "BACKGROUND_JOB")
+                                        {
+                                            lock (_commandThreads)
+                                            {
+                                                if (_commandThreads.ContainsKey(se["Job-UUID"]))
+                                                {
+                                                    lock (_awaitingCommandReturns)
+                                                    {
+                                                        _awaitingCommandReturns.Add(se["Job-UUID"], se.Message.Trim('\n'));
+                                                    }
+                                                    ManualResetEvent mre = _commandThreads[se["Job-UUID"]];
+                                                    _commandThreads.Remove(se["Job-UUID"]);
+                                                    mre.Set();
+                                                }
+                                            }
+                                        }
+                                        msgs.Enqueue(se);
                                     }
-                                    msgs.Enqueue(se);
-                                }
-                            }
-                            else if (pars["Content-Type"] == "command/reply")
-                            {
-                                CommandReplyMessage crm = new CommandReplyMessage(origMsg, subMsg);
-                                msgs.Enqueue(crm);
-                                if (crm["Job-UUID"] != null)
-                                {
-                                    lock (_awaitingCommandsEvents)
-                                    {
-                                        _currentCommandID = crm["Job-UUID"];
-                                        _awaitingCommandsEvents.Dequeue().Set();
-                                    }
-                                }
-                            }
-                            else if (pars["Content-Type"] == "log/data")
-                            {
-                                SocketLogMessage lg;
-                                lg = new SocketLogMessage(subMsg);
-                                if (_processingMessages.Count > 0)
-                                {
-                                    string eventMsg = _processingMessages[0];
-                                    _processingMessages.RemoveAt(0);
-                                    lg.FullMessage = eventMsg;
-                                    msgs.Enqueue(lg);
-                                }
-                                else
-                                {
-                                    _processingMessages.Insert(0, origMsg);
-                                    _processingMessages.Insert(1, subMsg);
                                     break;
-                                }
+                                case "command/reply":
+                                    CommandReplyMessage crm = new CommandReplyMessage(origMsg, subMsg);
+                                    msgs.Enqueue(crm);
+                                    if (crm["Job-UUID"] != null)
+                                    {
+                                        lock (_awaitingCommandsEvents)
+                                        {
+                                            _currentCommandID = crm["Job-UUID"];
+                                            _awaitingCommandsEvents.Dequeue().Set();
+                                        }
+                                    }
+                                    break;
+                                case "log/data":
+                                    SocketLogMessage lg;
+                                    lg = new SocketLogMessage(subMsg);
+                                    if (_processingMessages.Count > 0)
+                                    {
+                                        string eventMsg = _processingMessages[0];
+                                        _processingMessages.RemoveAt(0);
+                                        lg.FullMessage = eventMsg;
+                                        msgs.Enqueue(lg);
+                                    }
+                                    else
+                                    {
+                                        _processingMessages.Insert(0, origMsg);
+                                        _processingMessages.Insert(1, subMsg);
+                                        break;
+                                    }
+                                    break;
+                                case "text/disconnect-notice":
+                                    msgs.Enqueue(new DisconnectNoticeMessage(origMsg));
+                                    break;
+                                case "auth/request":
+                                    msgs.Enqueue(new AuthenticationRequestMessage(origMsg));
+                                    break;
+                                default:
+                                    if (_disposeInvalidMesssage != null)
+                                        _disposeInvalidMesssage(origMsg);
+                                    break;
                             }
                         }
                         if (msgs.Count > 0)

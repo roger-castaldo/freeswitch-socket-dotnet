@@ -3,12 +3,12 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>9.0.21022</ProductVersion>
+    <ProductVersion>9.0.30729</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{959D2956-E058-470C-B415-851FC334A00C}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Org.Reddragonit.FreeSwitch.Sockets</RootNamespace>
+    <RootNamespace>Org.Reddragonit.FreeSwitchSockets</RootNamespace>
     <AssemblyName>Socket</AssemblyName>
     <TargetFrameworkVersion>v2.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -40,10 +40,12 @@
     <Compile Include="Constants.cs" />
     <Compile Include="DialableNumber.cs" />
     <Compile Include="Messages\ASocketMessage.cs" />
+    <Compile Include="Messages\AuthenticationRequestMessage.cs" />
     <Compile Include="Messages\CommandReplyMessage.cs" />
     <Compile Include="Inbound\InboundConnection.cs" />
     <Compile Include="Inbound\InboundListener.cs" />
     <Compile Include="Inbound\Structures.cs" />
+    <Compile Include="Messages\DisconnectNoticeMessage.cs" />
     <Compile Include="MonoFix\WrappedTcpListener.cs" />
     <Compile Include="MonoFix\WrappedTcpListenerAsyncResult.cs" />
     <Compile Include="MT19937.cs" />
