@@ -17,6 +17,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
         public const string DEFAULT_EVENT_SOCKET_LISTEN_IP = "127.0.0.1";
         public const int DEFAULT_EVENT_SOCKET_LISTEN_PORT = 8021;
         public const string DEFAULT_EVENT_SOCKET_PASSWORD = "ClueCon";
+        private const string AUTH_COMMAND = "auth {0}\n\n";
 
         private struct sCommand
         {
@@ -54,14 +55,16 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
         private delProcessEventMessage _eventDelegate;
         private delReloadXml _preReloadCall;
         private delReloadXml _postReloadCall;
+        private string _password;
 
         public OutboundSocket(IPAddress ip,int port,string password,delProcessEventMessage eventDelegate,delProcessLogMessage logDelegate,delReloadXml preReloadCall,delReloadXml postReloadCall)
-            : base(ip,port,password)
+            : base(ip,port)
         {
             _eventDelegate = eventDelegate;
             _logDelegate = logDelegate;
             _preReloadCall = preReloadCall;
             _postReloadCall = postReloadCall;
+            _password = password;
         }
 
         public string IssueCommand(string command)
@@ -88,7 +91,23 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
             while (messages.Count > 0)
             {
                 ASocketMessage asm = messages.Dequeue();
-                new Thread(new ParameterizedThreadStart(_processMessage)).Start(asm);
+                if (asm is AuthenticationRequestMessage)
+                {
+                    socket.Send(ASCIIEncoding.ASCII.GetBytes(string.Format(AUTH_COMMAND, _password)));
+                    IsConnected = true;
+                    lock (_awaitingCommands)
+                    {
+                        if (!_exit)
+                        {
+                            while (_awaitingCommands.Count > 0)
+                            {
+                                byte[] commandBytes = _awaitingCommands.Dequeue();
+                                socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
+                            }
+                        }
+                    }
+                }else
+                    new Thread(new ParameterizedThreadStart(_processMessage)).Start(asm);
             }
         }
 
