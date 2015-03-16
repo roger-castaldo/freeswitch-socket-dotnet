@@ -1,0 +1,1 @@
+This project is designed to allow a user to control a freeswitch server through the outbound socket protocols or connect to a freeswitch server and monitor events and issue commands through the inbound event socket protocols.
