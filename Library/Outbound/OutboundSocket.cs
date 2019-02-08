@@ -66,9 +66,14 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
             _password = password;
         }
 
-        public string IssueCommand(string command)
+        public void IssueCommand(string command,out string response)
         {
-            return _IssueAPICommand(command,true);
+            response = _IssueAPICommand(command,true);
+        }
+
+        public void IssueCommand(string command)
+        {
+            _IssueAPICommand(command, false);
         }
 
         public void RegisterCustomEventCallBack(string eventName)
