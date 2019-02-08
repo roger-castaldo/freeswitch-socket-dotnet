@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <AssemblyName>FreeSwitchSockets</AssemblyName>
+    <RootNamespace>Org.Reddragonit.FreeSwitchSockets</RootNamespace>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Description>A DotNet implementation to connect to a freeswitch srver over event socket, accepts operations in both directions.</Description>
+  </PropertyGroup>
+
+</Project>

@@ -5,7 +5,6 @@ using System.Threading;
 using System.Net.Sockets;
 using Sockets = System.Net.Sockets;
 using System.Text.RegularExpressions;
-using System.Runtime.Remoting.Messaging;
 using System.Net;
 using Org.Reddragonit.FreeSwitchSockets.Messages;
 

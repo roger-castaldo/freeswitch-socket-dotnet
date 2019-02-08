@@ -22,7 +22,6 @@ namespace SocketTester
                 null, null, null);
             os.DisposeInvalidMessage += new ASocket.delDisposeInvalidMessage(DisposeInvalidMessage);
             os.RegisterEvent("all");
-            Console.WriteLine("Hit Enter to exit...");
             Console.ReadLine();
             os.Close();
         }
@@ -34,6 +33,28 @@ namespace SocketTester
 
         public static void ProcessEvent(SocketEvent evnt){
             Console.WriteLine("Event recieved of type " + evnt.EventName);
+            if (evnt.EventName.EndsWith("conference::maintenance")) {
+                StringBuilder sb = new StringBuilder();
+                foreach (string str in evnt.Keys)
+                {
+                    switch (str)
+                    {
+                        case "Action":
+                        case "Conference-Name":
+                        case "Conference-Size":
+                        case "Conference-Ghosts":
+                        case "Conference-Profile-Name":
+                        case "Conference-Unique-ID":
+                        case "Hear":
+                        case "Speak":
+                        case "Talking":
+                            sb.AppendFormat("{0}:{1},", str,evnt[str]);
+                            break;
+                    }
+                    
+                }
+                Console.WriteLine(string.Format("\tKEYS:{0}", sb.ToString()));
+            }
         }
 
         public static void ProcessConnection(InboundConnection conn)
