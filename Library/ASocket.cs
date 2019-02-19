@@ -8,6 +8,7 @@ using System.Net;
 using Org.Reddragonit.FreeSwitchSockets.Outbound;
 using System.Xml;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace Org.Reddragonit.FreeSwitchSockets
 {
@@ -86,6 +87,8 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private const string BACKGROUND_API_RESPONSE_EVENT = "SWITCH_EVENT_BACKGROUND_JOB";
         private const string API_ISSUE_COMMAND = "api {0}";
 
+        private static readonly Regex _regContentLength = new Regex("Content-Length: (\\d+)$", RegexOptions.Compiled | RegexOptions.ECMAScript);
+
         public delegate void delProcessEventMessage(SocketEvent message);
         public delegate void delDisposeInvalidMessage(string message);
 
@@ -130,9 +133,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private bool _exit = false;
         private IPAddress _ipAddress;
         private int _port;
-        private string _currentCommandID;
         private delProcessEventMessage _eventProcessor;
-        private Queue<ManualResetEvent> _awaitingCommandsEvents;
         private Queue<ManualResetEvent> _awaitingAPIEvents;
         private ManualResetEvent _sendAPIResultEvent;
         private string _sendAPIResult;
@@ -151,7 +152,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _textReceived = "";
             _processingMessages = new List<string>();
             _splitMessages = new List<string>();
-            _awaitingCommandsEvents = new Queue<ManualResetEvent>();
             _awaitingAPIEvents = new Queue<ManualResetEvent>();
             _sendAPIResultEvent = new ManualResetEvent(true);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
@@ -174,32 +174,17 @@ namespace Org.Reddragonit.FreeSwitchSockets
             this.RegisterEvent(BACKGROUND_API_RESPONSE_EVENT);
         }
 
-        protected string _IssueAPICommand(string command,bool api)
+        protected void _IssueAPICommand(string command, out string response)
         {
             ManualResetEvent mre = new ManualResetEvent(false);
-            if (api)
+            lock (_awaitingAPIEvents)
             {
-                lock (_awaitingAPIEvents)
-                {
-                    _awaitingAPIEvents.Enqueue(mre);
-                }
-            }
-            else
-            {
-                lock (_awaitingCommandsEvents)
-                {
-                    _awaitingCommandsEvents.Enqueue(mre);
-                }
+                _awaitingAPIEvents.Enqueue(mre);
             }
             _sendCommand(string.Format(API_ISSUE_COMMAND, command));
             mre.WaitOne();
-            if (api)
-            {
-                string ret = _sendAPIResult;
-                _sendAPIResultEvent.Set();
-                return ret.Trim('\n');
-            }else
-                return "";
+            response = _sendAPIResult.Trim('\n');
+            _sendAPIResultEvent.Set();
         }
 
         protected ASocket(IPAddress ip, int port)
@@ -207,8 +192,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _textReceived = "";
             _processingMessages = new List<string>();
             _splitMessages = new List<string>();
-            _awaitingCommandsEvents = new Queue<ManualResetEvent>();
-            _awaitingCommandsEvents = new Queue<ManualResetEvent>();
             _awaitingAPIEvents = new Queue<ManualResetEvent>();
             _sendAPIResultEvent = new ManualResetEvent(true);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
@@ -386,8 +369,25 @@ namespace Org.Reddragonit.FreeSwitchSockets
                             while (_textReceived.Contains(MESSAGE_END_STRING))
                             {
                                 trigger = true;
-                                _splitMessages.Add(_textReceived.Substring(0, _textReceived.IndexOf(MESSAGE_END_STRING)).Trim('\n'));
-                                _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
+                                string msg = _textReceived.Substring(0, _textReceived.IndexOf(MESSAGE_END_STRING)).Trim('\n');
+                                if (_regContentLength.IsMatch(msg))
+                                {
+                                    int len = int.Parse(_regContentLength.Match(msg).Groups[1].Value);
+                                    if (_textReceived.Length >= len + msg.Length)
+                                    {
+                                        _splitMessages.Add(msg);
+                                        _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
+                                        _splitMessages.Add(_textReceived.Substring(0, len));
+                                        _textReceived = _textReceived.Substring(len);
+                                    }
+                                    else
+                                        break;
+                                }
+                                else
+                                {
+                                    _splitMessages.Add(msg);
+                                    _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
+                                }
                             }
                             if (trigger)
                                 _mreMessageWaiting.Set();
@@ -479,14 +479,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
                                 case "command/reply":
                                     CommandReplyMessage crm = new CommandReplyMessage(origMsg, subMsg);
                                     msgs.Enqueue(crm);
-                                    if (crm["Job-UUID"] != null)
-                                    {
-                                        lock (_awaitingCommandsEvents)
-                                        {
-                                            _currentCommandID = crm["Job-UUID"];
-                                            _awaitingCommandsEvents.Dequeue().Set();
-                                        }
-                                    }
                                     break;
                                 case "api/response":
                                     msgs.Enqueue(new APIResponseMessage(subMsg));

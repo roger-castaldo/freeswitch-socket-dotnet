@@ -101,7 +101,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
         public bool IsExtensionLive(sDomainExtensionPair extension)
         {
             //patched to use to sofia_reg_count command instead of a more complicated command for ease of use, return 0 for not registered or 1+ for an extension being registered
-            string apiRes = _IssueAPICommand(string.Format(REGISTRATIONS_CHECK_COMMAND,extension.Extension, extension.Domain), true);
+            string apiRes;
+            _IssueAPICommand(string.Format(REGISTRATIONS_CHECK_COMMAND,extension.Extension, extension.Domain), out apiRes);
             return int.Parse(apiRes) > 0;
         }
 
@@ -905,7 +906,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.Inbound
 
         public string GetSystemVariable(string name)
         {
-            string ret = _IssueAPICommand("eval $${" + name + "}", true);
+            string ret;
+            _IssueAPICommand("eval $${" + name + "}", out ret);
             ret = (ret != null ? (ret.StartsWith("$") ? ret.Substring(1) : ret) : null);
             return ret;
         }

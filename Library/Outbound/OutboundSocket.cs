@@ -68,12 +68,7 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
 
         public void IssueCommand(string command,out string response)
         {
-            response = _IssueAPICommand(command,true);
-        }
-
-        public void IssueCommand(string command)
-        {
-            _IssueAPICommand(command, false);
+            _IssueAPICommand(command,out response);
         }
 
         public void RegisterCustomEventCallBack(string eventName)
@@ -85,7 +80,8 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
         {
             if (_preReloadCall != null)
                 _preReloadCall.Invoke();
-            IssueCommand(RELOAD_CONFIGS_COMMAND);
+            string tmp;
+            IssueCommand(RELOAD_CONFIGS_COMMAND,out tmp);
             if (_postReloadCall != null)
                 _postReloadCall.Invoke();
         }

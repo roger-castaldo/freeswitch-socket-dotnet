@@ -22,6 +22,8 @@ namespace SocketTester
                 null, null, null);
             os.DisposeInvalidMessage += new ASocket.delDisposeInvalidMessage(DisposeInvalidMessage);
             os.RegisterEvent("all");
+            os.RegisterEventFilter("Event-Name", "CUSTOM");
+            os.RegisterEventFilter("Event-Subclass", "conference::maintenance");
             Console.WriteLine("Issuing command to show registrations");
             string resp;
             os.IssueCommand("show registrations as xml", out resp);
