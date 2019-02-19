@@ -84,7 +84,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private const string EVENT_FILTER_COMMAND = "filter {0} {1}";
         private const string REMOVE_EVENT_FILTER_COMMAND = "filter delete {0} {1}";
         private const string BACKGROUND_API_RESPONSE_EVENT = "SWITCH_EVENT_BACKGROUND_JOB";
-        private const string API_ISSUE_COMMAND = "bgapi {0}";
+        private const string API_ISSUE_COMMAND = "api {0}";
 
         public delegate void delProcessEventMessage(SocketEvent message);
         public delegate void delDisposeInvalidMessage(string message);
@@ -133,8 +133,9 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private string _currentCommandID;
         private delProcessEventMessage _eventProcessor;
         private Queue<ManualResetEvent> _awaitingCommandsEvents;
-        private Dictionary<string, ManualResetEvent> _commandThreads;
-        private Dictionary<string, string> _awaitingCommandReturns;
+        private Queue<ManualResetEvent> _awaitingAPIEvents;
+        private ManualResetEvent _sendAPIResultEvent;
+        private string _sendAPIResult;
         private Thread _backgroundProcessor;
         private Thread _backgroundDataReader;
         private ManualResetEvent _mreMessageWaiting;
@@ -151,9 +152,8 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _processingMessages = new List<string>();
             _splitMessages = new List<string>();
             _awaitingCommandsEvents = new Queue<ManualResetEvent>();
-            _awaitingCommandReturns = new Dictionary<string, string>();
-            _commandThreads = new Dictionary<string, ManualResetEvent>();
-            _awaitingCommandReturns = new Dictionary<string, string>();
+            _awaitingAPIEvents = new Queue<ManualResetEvent>();
+            _sendAPIResultEvent = new ManualResetEvent(true);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
             _handlers = new List<sEventHandler>();
             _socket = socket;
@@ -174,34 +174,32 @@ namespace Org.Reddragonit.FreeSwitchSockets
             this.RegisterEvent(BACKGROUND_API_RESPONSE_EVENT);
         }
 
-        protected string _IssueAPICommand(string command, bool api)
+        protected string _IssueAPICommand(string command,bool api)
         {
             ManualResetEvent mre = new ManualResetEvent(false);
-            lock (_awaitingCommandsEvents)
+            if (api)
             {
-                _awaitingCommandsEvents.Enqueue(mre);
+                lock (_awaitingAPIEvents)
+                {
+                    _awaitingAPIEvents.Enqueue(mre);
+                }
             }
-            string comID="";
+            else
+            {
+                lock (_awaitingCommandsEvents)
+                {
+                    _awaitingCommandsEvents.Enqueue(mre);
+                }
+            }
             _sendCommand(string.Format(API_ISSUE_COMMAND, command));
             mre.WaitOne();
             if (api)
             {
-                lock (_commandThreads)
-                {
-                    mre = new ManualResetEvent(false);
-                    _commandThreads.Add(_currentCommandID, mre);
-                    comID = _currentCommandID;
-                }
-                string ret = "";
-                mre.WaitOne();
-                lock (_awaitingCommandReturns)
-                {
-                    ret = _awaitingCommandReturns[comID];
-                    _awaitingCommandReturns.Remove(comID);
-                }
+                string ret = _sendAPIResult;
+                _sendAPIResultEvent.Set();
                 return ret.Trim('\n');
-            }
-            return "";
+            }else
+                return "";
         }
 
         protected ASocket(IPAddress ip, int port)
@@ -210,9 +208,10 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _processingMessages = new List<string>();
             _splitMessages = new List<string>();
             _awaitingCommandsEvents = new Queue<ManualResetEvent>();
-            _awaitingCommandReturns = new Dictionary<string, string>();
-            _commandThreads = new Dictionary<string, ManualResetEvent>();
-            _awaitingCommandReturns = new Dictionary<string, string>();
+            _awaitingCommandsEvents = new Queue<ManualResetEvent>();
+            _awaitingAPIEvents = new Queue<ManualResetEvent>();
+            _sendAPIResultEvent = new ManualResetEvent(true);
+            _eventProcessor = new delProcessEventMessage(ProcessEvent);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
             _handlers = new List<sEventHandler>();
             _exit = false;
@@ -474,22 +473,6 @@ namespace Org.Reddragonit.FreeSwitchSockets
                                                 break;
                                             }
                                         }
-                                        if (se.EventName == "BACKGROUND_JOB")
-                                        {
-                                            lock (_commandThreads)
-                                            {
-                                                if (_commandThreads.ContainsKey(se["Job-UUID"]))
-                                                {
-                                                    lock (_awaitingCommandReturns)
-                                                    {
-                                                        _awaitingCommandReturns.Add(se["Job-UUID"], se.Message.Trim('\n'));
-                                                    }
-                                                    ManualResetEvent mre = _commandThreads[se["Job-UUID"]];
-                                                    _commandThreads.Remove(se["Job-UUID"]);
-                                                    mre.Set();
-                                                }
-                                            }
-                                        }
                                         msgs.Enqueue(se);
                                     }
                                     break;
@@ -503,6 +486,15 @@ namespace Org.Reddragonit.FreeSwitchSockets
                                             _currentCommandID = crm["Job-UUID"];
                                             _awaitingCommandsEvents.Dequeue().Set();
                                         }
+                                    }
+                                    break;
+                                case "api/response":
+                                    msgs.Enqueue(new APIResponseMessage(subMsg));
+                                    lock (_awaitingAPIEvents)
+                                    {
+                                        _sendAPIResultEvent.WaitOne();
+                                        _sendAPIResult = subMsg;
+                                        _awaitingAPIEvents.Dequeue().Set();
                                     }
                                     break;
                                 case "log/data":

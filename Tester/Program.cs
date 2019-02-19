@@ -22,6 +22,10 @@ namespace SocketTester
                 null, null, null);
             os.DisposeInvalidMessage += new ASocket.delDisposeInvalidMessage(DisposeInvalidMessage);
             os.RegisterEvent("all");
+            Console.WriteLine("Issuing command to show registrations");
+            string resp;
+            os.IssueCommand("show registrations as xml", out resp);
+            Console.WriteLine(resp);
             Console.ReadLine();
             os.Close();
         }

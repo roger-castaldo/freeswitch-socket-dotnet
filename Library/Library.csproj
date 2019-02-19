@@ -8,7 +8,7 @@
     <Description>A DotNet implementation to connect to a freeswitch srver over event socket, accepts operations in both directions.</Description>
     <PackageProjectUrl>https://github.com/roger-castaldo/freeswitch-socket-dotnet</PackageProjectUrl>
     <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
   </PropertyGroup>
 
 </Project>
