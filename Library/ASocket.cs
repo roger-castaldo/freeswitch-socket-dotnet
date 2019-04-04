@@ -86,6 +86,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private const string REMOVE_EVENT_FILTER_COMMAND = "filter delete {0} {1}";
         private const string BACKGROUND_API_RESPONSE_EVENT = "SWITCH_EVENT_BACKGROUND_JOB";
         private const string API_ISSUE_COMMAND = "api {0}";
+        private const string BACKGROUND_API_ISSUE_COMMAND = "bgapi {0}";
 
         private static readonly Regex _regContentLength = new Regex("Content-Length: (\\d+)$", RegexOptions.Compiled | RegexOptions.ECMAScript);
 
@@ -184,6 +185,18 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _sendCommand(string.Format(API_ISSUE_COMMAND, command));
             mre.WaitOne();
             response = _sendAPIResult.Trim('\n');
+            _sendAPIResultEvent.Set();
+        }
+
+        protected void _IssueBackgroundAPICommand(string command)
+        {
+            ManualResetEvent mre = new ManualResetEvent(false);
+            lock (_awaitingAPIEvents)
+            {
+                _awaitingAPIEvents.Enqueue(mre);
+            }
+            _sendCommand(string.Format(BACKGROUND_API_ISSUE_COMMAND, command));
+            mre.WaitOne();
             _sendAPIResultEvent.Set();
         }
 

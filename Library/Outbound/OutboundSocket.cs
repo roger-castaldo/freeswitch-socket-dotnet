@@ -71,6 +71,11 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
             _IssueAPICommand(command,out response);
         }
 
+        public void IssueBackgroundAPICommand(string command)
+        {
+            _IssueBackgroundAPICommand(command);
+        }
+
         public void RegisterCustomEventCallBack(string eventName)
         {
             RegisterEvent("CUSTOM." + eventName);
