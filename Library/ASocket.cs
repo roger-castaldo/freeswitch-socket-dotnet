@@ -88,7 +88,10 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private const string API_ISSUE_COMMAND = "api {0}";
         private const string BACKGROUND_API_ISSUE_COMMAND = "bgapi {0}";
 
-        private static readonly Regex _regContentLength = new Regex("Content-Length: (\\d+)$", RegexOptions.Compiled | RegexOptions.ECMAScript);
+        private static readonly Regex _regMessageStart = new Regex("^(Content-Type|Reply-Text|Content-Length|Job-UUID):.+$", RegexOptions.Compiled | RegexOptions.ECMAScript|RegexOptions.Multiline);
+        private static readonly Regex _regContentLength = new Regex("^Content-Length: (\\d+)$", RegexOptions.Compiled | RegexOptions.ECMAScript|RegexOptions.Multiline);
+        private static readonly Regex _regAuthRequest = new Regex("^Content-Type: auth/request$", RegexOptions.Compiled | RegexOptions.ECMAScript);
+        private static readonly Regex _regBackgroundCommandResponse = new Regex("^Job-UUID:\\s[0-9a-fA-F]{8}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{4}\\-[0-9a-fA-F]{12}$", RegexOptions.Compiled | RegexOptions.ECMAScript | RegexOptions.Multiline);
 
         public delegate void delProcessEventMessage(SocketEvent message);
         public delegate void delDisposeInvalidMessage(string message);
@@ -136,6 +139,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private int _port;
         private delProcessEventMessage _eventProcessor;
         private Queue<ManualResetEvent> _awaitingAPIEvents;
+        private Queue<ManualResetEvent> _awaitingBackgroundCommandEvents;
         private ManualResetEvent _sendAPIResultEvent;
         private string _sendAPIResult;
         private Thread _backgroundProcessor;
@@ -154,6 +158,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _processingMessages = new List<string>();
             _splitMessages = new List<string>();
             _awaitingAPIEvents = new Queue<ManualResetEvent>();
+            _awaitingBackgroundCommandEvents = new Queue<ManualResetEvent>();
             _sendAPIResultEvent = new ManualResetEvent(true);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
             _handlers = new List<sEventHandler>();
@@ -191,9 +196,9 @@ namespace Org.Reddragonit.FreeSwitchSockets
         protected void _IssueBackgroundAPICommand(string command)
         {
             ManualResetEvent mre = new ManualResetEvent(false);
-            lock (_awaitingAPIEvents)
+            lock (_awaitingBackgroundCommandEvents)
             {
-                _awaitingAPIEvents.Enqueue(mre);
+                _awaitingBackgroundCommandEvents.Enqueue(mre);
             }
             _sendCommand(string.Format(BACKGROUND_API_ISSUE_COMMAND, command));
             mre.WaitOne();
@@ -206,6 +211,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _processingMessages = new List<string>();
             _splitMessages = new List<string>();
             _awaitingAPIEvents = new Queue<ManualResetEvent>();
+            _awaitingBackgroundCommandEvents = new Queue<ManualResetEvent>();
             _sendAPIResultEvent = new ManualResetEvent(true);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
@@ -375,35 +381,65 @@ namespace Org.Reddragonit.FreeSwitchSockets
                     lock (_textReceived)
                     {
                         _textReceived += ASCIIEncoding.ASCII.GetString(buffer, 0, bytesRead);
-                        _textReceived = _textReceived.TrimStart('\n');
-                        bool trigger = false;
-                        lock (_splitMessages)
+                        List<string> tmp = new List<string>();
+                        while (_regMessageStart.IsMatch(_textReceived))
                         {
-                            while (_textReceived.Contains(MESSAGE_END_STRING))
+                            Match m = _regMessageStart.Match(_textReceived);
+                            if (m.Index > 0)
+                                _textReceived = _textReceived.Substring(m.Index);
+                            StringBuilder sb = new StringBuilder();
+                            while (_textReceived.Contains('\n'))
                             {
-                                trigger = true;
-                                string msg = _textReceived.Substring(0, _textReceived.IndexOf(MESSAGE_END_STRING)).Trim('\n');
-                                if (_regContentLength.IsMatch(msg))
+                                string line = _textReceived.Substring(0, _textReceived.IndexOf('\n'));
+                                if (_regMessageStart.IsMatch(line))
                                 {
-                                    int len = int.Parse(_regContentLength.Match(msg).Groups[1].Value);
-                                    if (_textReceived.Length >= len + msg.Length)
+                                    sb.AppendLine(line);
+                                    _textReceived = _textReceived.Substring(_textReceived.IndexOf('\n') + 1);
+                                }
+                                else if (line == "")
+                                    break;
+                                else
+                                {
+                                    _textReceived = sb.ToString() + _textReceived;
+                                    sb.Clear();
+                                }
+                            }
+                            if (sb.Length == 0)
+                                break;
+                            if (_regAuthRequest.IsMatch(sb.ToString().Trim()))
+                                tmp.Add(sb.ToString());
+                            else if (_regMessageStart.Matches(sb.ToString()).Count >= 2)
+                            {
+                                if (_regContentLength.IsMatch(sb.ToString()))
+                                {
+                                    int len = int.Parse(_regContentLength.Match(sb.ToString()).Groups[1].Value) + 1;
+                                    if (_textReceived.Length >= len)
                                     {
-                                        _splitMessages.Add(msg);
-                                        _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
-                                        _splitMessages.Add(_textReceived.Substring(0, len));
+                                        tmp.Add(sb.ToString());
+                                        tmp.Add(_textReceived.Substring(0, len));
                                         _textReceived = _textReceived.Substring(len);
                                     }
                                     else
+                                    {
+                                        _textReceived = sb.ToString() + _textReceived;
                                         break;
+                                    }
                                 }
                                 else
-                                {
-                                    _splitMessages.Add(msg);
-                                    _textReceived = _textReceived.Substring(_textReceived.IndexOf(MESSAGE_END_STRING) + MESSAGE_END_STRING.Length);
-                                }
+                                    tmp.Add(sb.ToString());
+                            }else
+                            {
+                                _textReceived = sb.ToString() + _textReceived;
+                                break;
                             }
-                            if (trigger)
-                                _mreMessageWaiting.Set();
+                        }
+                        if (tmp.Count > 0)
+                        {
+                            lock (_splitMessages)
+                            {
+                                _splitMessages.AddRange(tmp);
+                            }
+                            _mreMessageWaiting.Set();
                         }
                     }
                 }
@@ -490,8 +526,19 @@ namespace Org.Reddragonit.FreeSwitchSockets
                                     }
                                     break;
                                 case "command/reply":
-                                    CommandReplyMessage crm = new CommandReplyMessage(origMsg, subMsg);
-                                    msgs.Enqueue(crm);
+                                    if (_regBackgroundCommandResponse.IsMatch(origMsg))
+                                    {
+                                        lock (_awaitingBackgroundCommandEvents)
+                                        {
+                                            if (_awaitingBackgroundCommandEvents.Count>0)
+                                                _awaitingBackgroundCommandEvents.Dequeue().Set();
+                                        }
+                                    }
+                                    else
+                                    {
+                                        CommandReplyMessage crm = new CommandReplyMessage(origMsg, subMsg);
+                                        msgs.Enqueue(crm);
+                                    }
                                     break;
                                 case "api/response":
                                     msgs.Enqueue(new APIResponseMessage(subMsg));
