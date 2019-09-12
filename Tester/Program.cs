@@ -1,12 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using Org.Reddragonit.FreeSwitchSockets;
 using Org.Reddragonit.FreeSwitchSockets.Inbound;
-using System.Net;
-using System.Threading;
 using Org.Reddragonit.FreeSwitchSockets.Messages;
 using Org.Reddragonit.FreeSwitchSockets.Outbound;
-using Org.Reddragonit.FreeSwitchSockets;
+using System;
+using System.Diagnostics;
+using System.Net;
+using System.Text;
+using System.Threading;
 
 namespace SocketTester
 {
@@ -63,6 +63,19 @@ namespace SocketTester
                     
                 }
                 Console.WriteLine(string.Format("\tKEYS:{0}", sb.ToString()));
+            }else if (evnt.EventName == "HEARTBEAT")
+            {
+                Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                long totalBytesOfMemoryUsed = currentProcess.WorkingSet64;
+                decimal obytes = (decimal)totalBytesOfMemoryUsed;
+                if (obytes > 1024 * 1024 * 1024)
+                    Console.WriteLine("Current Memory: {0} GB", Math.Round(obytes / (1024 * 1024 * 1024),2));
+                else if(obytes > 1024 * 1024)
+                    Console.WriteLine("Current Memory: {0} MB", Math.Round(obytes / (1024 * 1024),2));
+                else if (obytes > 1024)
+                    Console.WriteLine("Current Memory: {0} KB", Math.Round(obytes / 1024,2));
+                else
+                    Console.WriteLine("Current Memory: {0} B", Math.Round(obytes,2));
             }
         }
 

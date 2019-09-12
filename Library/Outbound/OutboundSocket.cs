@@ -7,6 +7,7 @@ using Sockets = System.Net.Sockets;
 using System.Text.RegularExpressions;
 using System.Net;
 using Org.Reddragonit.FreeSwitchSockets.Messages;
+using System.Threading.Tasks;
 
 namespace Org.Reddragonit.FreeSwitchSockets.Outbound
 {
@@ -97,22 +98,9 @@ namespace Org.Reddragonit.FreeSwitchSockets.Outbound
             {
                 ASocketMessage asm = messages.Dequeue();
                 if (asm is AuthenticationRequestMessage)
-                {
                     socket.Send(ASCIIEncoding.ASCII.GetBytes(string.Format(AUTH_COMMAND, _password)));
-                    IsConnected = true;
-                    lock (_awaitingCommands)
-                    {
-                        if (!_exit)
-                        {
-                            while (_awaitingCommands.Count > 0)
-                            {
-                                byte[] commandBytes = _awaitingCommands.Dequeue();
-                                socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
-                            }
-                        }
-                    }
-                }else
-                    new Thread(new ParameterizedThreadStart(_processMessage)).Start(asm);
+                else
+                    new Task(() => { _processMessage(asm); }).Start();
             }
         }
 

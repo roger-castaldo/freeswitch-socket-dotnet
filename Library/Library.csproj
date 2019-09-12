@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netcoreapp2.1</TargetFramework>
@@ -8,8 +8,9 @@
     <Description>A DotNet implementation to connect to a freeswitch srver over event socket, accepts operations in both directions.</Description>
     <PackageProjectUrl>https://github.com/roger-castaldo/freeswitch-socket-dotnet</PackageProjectUrl>
     <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
-    <Version>1.0.5</Version>
-    <AssemblyVersion>1.0.5.0</AssemblyVersion>
+    <Version>1.0.7</Version>
+    <AssemblyVersion>1.0.7.0</AssemblyVersion>
+    <PackageReleaseNotes>minor adjustments to try and remove a memory leak that occurs from sockets being left open for a long priod of time.</PackageReleaseNotes>
   </PropertyGroup>
 
 </Project>
