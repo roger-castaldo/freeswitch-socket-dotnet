@@ -29,7 +29,14 @@ namespace SocketTester
             os.IssueCommand("show registrations as xml", out resp);
             Console.WriteLine(resp);
             Console.ReadLine();
-            os.Close();
+            try
+            {
+                os.Close();
+            }catch(Exception e)
+            {
+                Console.WriteLine(e.Message);
+                Console.WriteLine(e.StackTrace);
+            }
         }
 
         public static void DisposeInvalidMessage(string message){

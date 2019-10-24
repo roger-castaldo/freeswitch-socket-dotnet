@@ -160,20 +160,45 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private string _sendAPIResult;
         private delDisposeInvalidMessage _disposeInvalidMesssage;
         private Queue<Task> _messageTasks;
+        private ManualResetEvent _mreEventQueues;
+        private ManualResetEvent _mreHandlers;
+        private ManualResetEvent _mreTextRecieved;
+        private ManualResetEvent _mreMessageTasks;
+        private ManualResetEvent _mreAwaitingCommands;
         public delDisposeInvalidMessage DisposeInvalidMessage
         {
             get { return _disposeInvalidMesssage; }
             set { _disposeInvalidMesssage = value; }
         }
 
+        private void _InitEvents()
+        {
+            _sendAPIResultEvent = new ManualResetEvent(false);
+            _mreEventQueues = new ManualResetEvent(false);
+            _mreHandlers = new ManualResetEvent(false);
+            _mreTextRecieved = new ManualResetEvent(false);
+            _mreMessageTasks = new ManualResetEvent(false);
+            _mreAwaitingCommands = new ManualResetEvent(false);
+        }
+
+        private void _TripEvents()
+        {
+            _sendAPIResultEvent.Set();
+            _mreEventQueues.Set();
+            _mreEventQueues.Set();
+            _mreTextRecieved.Set();
+            _mreMessageTasks.Set();
+            _mreAwaitingCommands.Set();
+        }
+
         protected ASocket(Socket socket)
         {
+            _InitEvents();
             _messageTasks = new Queue<Task>();
             _textReceived = "";
             _processingMessages = new List<string>();
             _awaitingAPIEvents = new Queue<ManualResetEvent>();
             _awaitingBackgroundCommandEvents = new Queue<ManualResetEvent>();
-            _sendAPIResultEvent = new ManualResetEvent(true);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
             _handlers = new List<sEventHandler>();
             _socket = socket;
@@ -185,16 +210,16 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _preSocketReady();
             _socket.ReceiveTimeout = 1000;
             stateObject state = new stateObject();
+            _TripEvents();
             _socket.BeginReceive(state.Buffer, 0, state.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), state);
             this.RegisterEvent(BACKGROUND_API_RESPONSE_EVENT);
         }
         protected void _IssueAPICommand(string command, out string response)
         {
             ManualResetEvent mre = new ManualResetEvent(false);
-            lock (_awaitingAPIEvents)
-            {
-                _awaitingAPIEvents.Enqueue(mre);
-            }
+            _mreEventQueues.WaitOne();
+            _awaitingAPIEvents.Enqueue(mre);
+            _mreEventQueues.Set();
             _sendCommand(string.Format(API_ISSUE_COMMAND, command));
             mre.WaitOne();
             response = _sendAPIResult.Trim('\n');
@@ -204,23 +229,25 @@ namespace Org.Reddragonit.FreeSwitchSockets
         protected void _IssueBackgroundAPICommand(string command)
         {
             ManualResetEvent mre = new ManualResetEvent(false);
-            lock (_awaitingBackgroundCommandEvents)
-            {
-                _awaitingBackgroundCommandEvents.Enqueue(mre);
-            }
+            _mreEventQueues.WaitOne();
+            _awaitingBackgroundCommandEvents.Enqueue(mre);
+            _mreEventQueues.Set();
             _sendCommand(string.Format(BACKGROUND_API_ISSUE_COMMAND, command));
-            mre.WaitOne();
-            _sendAPIResultEvent.Set();
+            Task.Run(() =>
+            {
+                mre.WaitOne();
+                _sendAPIResultEvent.Set();
+            });
         }
 
         protected ASocket(IPAddress ip, int port)
         {
+            _InitEvents();
             _messageTasks = new Queue<Task>();
             _textReceived = "";
             _processingMessages = new List<string>();
             _awaitingAPIEvents = new Queue<ManualResetEvent>();
             _awaitingBackgroundCommandEvents = new Queue<ManualResetEvent>();
-            _sendAPIResultEvent = new ManualResetEvent(true);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
             _eventProcessor = new delProcessEventMessage(ProcessEvent);
             _handlers = new List<sEventHandler>();
@@ -232,6 +259,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             _socket.ReceiveTimeout = 1000;
             _preSocketReady();
+            _TripEvents();
             Thread th = new Thread(new ThreadStart(BackgroundRun));
             th.IsBackground = true;
             th.Start();
@@ -271,15 +299,14 @@ namespace Org.Reddragonit.FreeSwitchSockets
         {
             if (!_isConnected)
             {
-                lock (_awaitingCommands)
+                _mreAwaitingCommands.WaitOne();
+                if (_isConnected)
+                    _socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
+                else
                 {
-                    if (_isConnected)
-                        _socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
-                    else
-                    {
-                        _awaitingCommands.Enqueue(commandBytes);
-                    }
+                    _awaitingCommands.Enqueue(commandBytes);
                 }
+                _mreAwaitingCommands.Set();
             }
             else
             {
@@ -301,42 +328,41 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
         public void Close()
         {
-            _exit = true;
-            _close();
-            _sendCommand("exit");
             try
             {
+                _exit = true;
+                _close();
+                _sendCommand("exit");
                 _socket.Disconnect(false);
                 _socket.Close();
             }
             catch (Exception e)
             {
+                throw e;
             }
         }
 
         public long RegisterEventHandler(string eventName, string uuid, string callerUUID, string channelName, delProcessEventMessage handler)
         {
             long id = _random.NextLong();
-            lock (_handlers)
-            {
-                _handlers.Add(new sEventHandler(eventName, uuid, callerUUID, channelName, handler, id));
-            }
+            _mreHandlers.WaitOne();
+            _handlers.Add(new sEventHandler(eventName, uuid, callerUUID, channelName, handler, id));
+            _mreHandlers.Set();
             return id;
         }
 
         public void UnRegisterEventHandler(long id)
         {
-            lock (_handlers)
+            _mreHandlers.WaitOne();
+            for (int x = 0; x < _handlers.Count; x++)
             {
-                for (int x = 0; x < _handlers.Count; x++)
+                if (_handlers[x].ID == id)
                 {
-                    if (_handlers[x].ID == id)
-                    {
-                        _handlers.RemoveAt(x);
-                        break;
-                    }
+                    _handlers.RemoveAt(x);
+                    break;
                 }
             }
+            _mreHandlers.Set();
         }
 
         public void RegisterEvent(string eventName)
@@ -366,101 +392,109 @@ namespace Org.Reddragonit.FreeSwitchSockets
         private void _processMessageData(IAsyncResult ar)
         {
             stateObject sa = (stateObject)ar.AsyncState;
-            int bytesRead = _socket.EndReceive(ar);
+            int bytesRead = 0;
+            try
+            {
+                bytesRead = _socket.EndReceive(ar);
+            }catch(Exception e)
+            {
+                bytesRead = 0;
+            }
             if (bytesRead > 0)
             {
-                lock (_textReceived)
+                _mreTextRecieved.WaitOne();
+                sa.AppendTo(ref _textReceived, bytesRead);
+                byte[] buff = new byte[4096];
+                while (_socket.Poll(20, SelectMode.SelectRead))
                 {
-                    sa.AppendTo(ref _textReceived, bytesRead);
-                    byte[] buff = new byte[4096];
-                    while (_socket.Poll(20, SelectMode.SelectRead))
+                    bytesRead = _socket.Receive(buff);
+                    _textReceived += System.Text.ASCIIEncoding.ASCII.GetString(buff, 0, bytesRead);
+                }
+                _socket.BeginReceive(sa.Buffer, 0, sa.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), sa);
+                List<string> tmp = new List<string>();
+                while (_regMessageStart.IsMatch(_textReceived))
+                {
+                    Match m = _regMessageStart.Match(_textReceived);
+                    if (m.Index > 0)
+                        _textReceived = _textReceived.Substring(m.Index);
+                    StringBuilder sb = new StringBuilder();
+                    while (_textReceived.Contains('\n'))
                     {
-                        bytesRead = _socket.Receive(buff);
-                        _textReceived += System.Text.ASCIIEncoding.ASCII.GetString(buff, 0, bytesRead);
-                    }
-                    _socket.BeginReceive(sa.Buffer, 0, sa.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), sa);
-                    List<string> tmp = new List<string>();
-                    while (_regMessageStart.IsMatch(_textReceived))
-                    {
-                        Match m = _regMessageStart.Match(_textReceived);
-                        if (m.Index > 0)
-                            _textReceived = _textReceived.Substring(m.Index);
-                        StringBuilder sb = new StringBuilder();
-                        while (_textReceived.Contains('\n'))
+                        string line = _textReceived.Substring(0, _textReceived.IndexOf('\n'));
+                        if (_regMessageStart.IsMatch(line))
                         {
-                            string line = _textReceived.Substring(0, _textReceived.IndexOf('\n'));
-                            if (_regMessageStart.IsMatch(line))
-                            {
-                                sb.AppendLine(line);
-                                _textReceived = _textReceived.Substring(_textReceived.IndexOf('\n') + 1);
-                            }
-                            else if (line == "")
-                                break;
-                            else
-                            {
-                                _textReceived = sb.ToString() + _textReceived;
-                                sb.Clear();
-                            }
+                            sb.AppendLine(line);
+                            _textReceived = _textReceived.Substring(_textReceived.IndexOf('\n') + 1);
                         }
-                        if (sb.Length == 0)
+                        else if (line == "")
                             break;
-                        if (_regAuthRequest.IsMatch(sb.ToString().Trim()))
-                            tmp.Add(sb.ToString());
-                        else if (_regMessageStart.Matches(sb.ToString()).Count >= 2)
-                        {
-                            if (_regContentLength.IsMatch(sb.ToString()))
-                            {
-                                int len = int.Parse(_regContentLength.Match(sb.ToString()).Groups[1].Value) + 1;
-                                if (_textReceived.Length >= len)
-                                {
-                                    tmp.Add(sb.ToString());
-                                    tmp.Add(_textReceived.Substring(0, len));
-                                    _textReceived = _textReceived.Substring(len);
-                                }
-                                else
-                                {
-                                    _textReceived = sb.ToString() + _textReceived;
-                                    break;
-                                }
-                            }
-                            else
-                                tmp.Add(sb.ToString());
-                        }
                         else
                         {
                             _textReceived = sb.ToString() + _textReceived;
-                            break;
+                            sb.Clear();
                         }
                     }
-                    if (tmp.Count > 0)
+                    if (sb.Length == 0)
+                        break;
+                    if (_regAuthRequest.IsMatch(sb.ToString().Trim()))
+                        tmp.Add(sb.ToString());
+                    else if (_regMessageStart.Matches(sb.ToString()).Count >= 2)
                     {
-                        Task t = new Task(() =>
+                        if (_regContentLength.IsMatch(sb.ToString()))
                         {
-                            _processSplitMessages(tmp.ToArray());
-                        });
-                        lock (_messageTasks)
-                        {
-                            _messageTasks.Enqueue(t);
-                            if (_messageTasks.Count == 1)
-                                t.Start();
+                            int len = int.Parse(_regContentLength.Match(sb.ToString()).Groups[1].Value) + 1;
+                            if (_textReceived.Length >= len)
+                            {
+                                tmp.Add(sb.ToString());
+                                tmp.Add(_textReceived.Substring(0, len));
+                                _textReceived = _textReceived.Substring(len);
+                            }
+                            else
+                            {
+                                _textReceived = sb.ToString() + _textReceived;
+                                break;
+                            }
                         }
+                        else
+                            tmp.Add(sb.ToString());
+                    }
+                    else
+                    {
+                        _textReceived = sb.ToString() + _textReceived;
+                        break;
                     }
                 }
+                if (tmp.Count > 0)
+                {
+                    Task t = new Task(() =>
+                    {
+                        _processSplitMessages(tmp.ToArray());
+                    });
+                    _mreMessageTasks.WaitOne();
+                    _messageTasks.Enqueue(t);
+                    if (_messageTasks.Count == 1)
+                        t.Start();
+                    _mreMessageTasks.Set();
+                }
+                _mreTextRecieved.Set();
             }
             else
             {
-                stateObject state = new stateObject();
-                _socket.BeginReceive(sa.Buffer, 0, sa.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), sa);
+                try
+                {
+                    stateObject state = new stateObject();
+                    _socket.BeginReceive(sa.Buffer, 0, sa.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), sa);
+                }
+                catch (Exception e) { }
             }
         }
 
         private void _processSplitMessages(string[] additionalMessages)
         {
             Task curTask = null;
-            lock (_messageTasks)
-            {
-                curTask = _messageTasks.Dequeue();
-            }
+            _mreMessageTasks.WaitOne();
+            curTask = _messageTasks.Dequeue();
+            _mreMessageTasks.Set();
             _processingMessages.AddRange(additionalMessages);
             Queue<ASocketMessage> msgs = new Queue<ASocketMessage>();
             bool exit = false;
@@ -532,28 +566,26 @@ namespace Org.Reddragonit.FreeSwitchSockets
                                 {
                                     _clearAuthCommandReply = false;
                                     IsConnected = true;
-                                    lock (_awaitingCommands)
+                                    _mreAwaitingCommands.WaitOne();
+                                    if (!_exit)
                                     {
-                                        if (!_exit)
+                                        while (_awaitingCommands.Count > 0)
                                         {
-                                            while (_awaitingCommands.Count > 0)
-                                            {
-                                                byte[] commandBytes = _awaitingCommands.Dequeue();
-                                                socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
-                                            }
+                                            byte[] commandBytes = _awaitingCommands.Dequeue();
+                                            socket.Send(commandBytes, 0, commandBytes.Length, SocketFlags.None);
                                         }
                                     }
+                                    _mreAwaitingCommands.Set();
                                 }
                             }
                             else
                             {
                                 if (_regBackgroundCommandResponse.IsMatch(origMsg))
                                 {
-                                    lock (_awaitingBackgroundCommandEvents)
-                                    {
-                                        if (_awaitingBackgroundCommandEvents.Count > 0)
-                                            _awaitingBackgroundCommandEvents.Dequeue().Set();
-                                    }
+                                    _mreEventQueues.WaitOne();
+                                    if (_awaitingBackgroundCommandEvents.Count > 0)
+                                        _awaitingBackgroundCommandEvents.Dequeue().Set();
+                                    _mreEventQueues.Set();
                                 }
                                 else
                                 {
@@ -564,12 +596,11 @@ namespace Org.Reddragonit.FreeSwitchSockets
                             break;
                         case "api/response":
                             msgs.Enqueue(new APIResponseMessage(subMsg));
-                            lock (_awaitingAPIEvents)
-                            {
-                                _sendAPIResultEvent.WaitOne();
-                                _sendAPIResult = subMsg;
-                                _awaitingAPIEvents.Dequeue().Set();
-                            }
+                            _mreEventQueues.WaitOne();
+                            _sendAPIResultEvent.WaitOne();
+                            _sendAPIResult = subMsg;
+                            _awaitingAPIEvents.Dequeue().Set();
+                            _mreEventQueues.Set();
                             break;
                         case "log/data":
                             SocketLogMessage lg;
@@ -607,32 +638,37 @@ namespace Org.Reddragonit.FreeSwitchSockets
             }
             if (msgs.Count > 0)
                 _processMessageQueue(msgs);
-            lock (_messageTasks)
+            _mreMessageTasks.WaitOne();
+            if (_messageTasks.Count > 0)
             {
-                if (_messageTasks.Count > 0)
-                {
-                    _messageTasks.Peek().Start();
-                }
+                _messageTasks.Peek().Start();
             }
+            _mreMessageTasks.Set();
         }
 
         private void ProcessEvent(SocketEvent message)
         {
-            sEventHandler[] handlers;
-            lock (_handlers)
+            Task.Run(() =>
             {
+                sEventHandler[] handlers;
+                _mreHandlers.WaitOne();
                 handlers = new sEventHandler[_handlers.Count];
                 _handlers.CopyTo(handlers, 0);
-            }
-            foreach (sEventHandler eh in handlers)
-            {
-                if (eh.HandlesEvent(message))
-                    eh.Handler.BeginInvoke(message, new AsyncCallback(ProcessingComplete), this);
-            }
-        }
-
-        private void ProcessingComplete(IAsyncResult res)
-        {
+                _mreHandlers.Set();
+                foreach (sEventHandler eh in handlers)
+                {
+                    if (eh.HandlesEvent(message))
+                    {
+                        Task.Run(() =>
+                        {
+                            try
+                            {
+                                eh.Handler.Invoke(message);
+                            }catch(Exception e) { }
+                        });
+                    }
+                }
+            });
         }
     }
 }

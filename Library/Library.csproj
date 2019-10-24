@@ -8,9 +8,9 @@
     <Description>A DotNet implementation to connect to a freeswitch srver over event socket, accepts operations in both directions.</Description>
     <PackageProjectUrl>https://github.com/roger-castaldo/freeswitch-socket-dotnet</PackageProjectUrl>
     <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
-    <Version>1.0.7</Version>
-    <AssemblyVersion>1.0.7.0</AssemblyVersion>
-    <PackageReleaseNotes>minor adjustments to try and remove a memory leak that occurs from sockets being left open for a long priod of time.</PackageReleaseNotes>
+    <Version>1.0.8</Version>
+    <AssemblyVersion>1.0.8.0</AssemblyVersion>
+    <PackageReleaseNotes>adjustments to no longer use lock instead use manual reset events as well as moved code base to use more Tasks than begininvoke</PackageReleaseNotes>
   </PropertyGroup>
 
 </Project>
