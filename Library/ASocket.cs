@@ -226,18 +226,26 @@ namespace Org.Reddragonit.FreeSwitchSockets
             _sendAPIResultEvent.Set();
         }
 
-        protected void _IssueBackgroundAPICommand(string command)
+        protected void _IssueBackgroundAPICommand(string command,bool wait)
         {
             ManualResetEvent mre = new ManualResetEvent(false);
             _mreEventQueues.WaitOne();
             _awaitingBackgroundCommandEvents.Enqueue(mre);
             _mreEventQueues.Set();
             _sendCommand(string.Format(BACKGROUND_API_ISSUE_COMMAND, command));
-            Task.Run(() =>
+            if (wait)
             {
                 mre.WaitOne();
                 _sendAPIResultEvent.Set();
-            });
+            }
+            else
+            {
+                Task.Run(() =>
+                {
+                    mre.WaitOne();
+                    _sendAPIResultEvent.Set();
+                });
+            }
         }
 
         protected ASocket(IPAddress ip, int port)
@@ -333,13 +341,21 @@ namespace Org.Reddragonit.FreeSwitchSockets
                 _exit = true;
                 _close();
                 _sendCommand("exit");
-                _socket.Disconnect(false);
-                _socket.Close();
             }
             catch (Exception e)
             {
-                throw e;
             }
+            Task.Run(() =>
+            {
+                try
+                {
+                    _socket.Disconnect(false);
+                    _socket.Close();
+                }
+                catch (Exception e)
+                {
+                }
+            });
         }
 
         public long RegisterEventHandler(string eventName, string uuid, string callerUUID, string channelName, delProcessEventMessage handler)
