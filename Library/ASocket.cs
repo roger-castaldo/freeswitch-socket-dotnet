@@ -22,7 +22,7 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
             public stateObject()
             {
-                _buffer = new byte[4];
+                _buffer = new byte[1];
             }
 
             public void AppendTo(ref string buff,int len) {
@@ -407,101 +407,112 @@ namespace Org.Reddragonit.FreeSwitchSockets
 
         private void _processMessageData(IAsyncResult ar)
         {
-            stateObject sa = (stateObject)ar.AsyncState;
-            int bytesRead = 0;
             try
             {
-                bytesRead = _socket.EndReceive(ar);
-            }catch(Exception e)
-            {
-                bytesRead = 0;
-            }
-            if (bytesRead > 0)
-            {
-                _mreTextRecieved.WaitOne();
-                sa.AppendTo(ref _textReceived, bytesRead);
-                byte[] buff = new byte[4096];
-                while (_socket.Poll(20, SelectMode.SelectRead))
+                stateObject sa = (stateObject)ar.AsyncState;
+                int bytesRead = 0;
+                try
                 {
-                    bytesRead = _socket.Receive(buff);
-                    _textReceived += System.Text.ASCIIEncoding.ASCII.GetString(buff, 0, bytesRead);
+                    bytesRead = _socket.EndReceive(ar);
                 }
-                _socket.BeginReceive(sa.Buffer, 0, sa.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), sa);
-                List<string> tmp = new List<string>();
-                while (_regMessageStart.IsMatch(_textReceived))
+                catch (Exception e)
                 {
-                    Match m = _regMessageStart.Match(_textReceived);
-                    if (m.Index > 0)
-                        _textReceived = _textReceived.Substring(m.Index);
-                    StringBuilder sb = new StringBuilder();
-                    while (_textReceived.Contains('\n'))
+                    bytesRead = 0;
+                }
+                if (bytesRead > 0)
+                {
+                    _mreTextRecieved.WaitOne();
+                    sa.AppendTo(ref _textReceived, bytesRead);
+                    byte[] buff = new byte[4096];
+                    try
                     {
-                        string line = _textReceived.Substring(0, _textReceived.IndexOf('\n'));
-                        if (_regMessageStart.IsMatch(line))
-                        {
-                            sb.AppendLine(line);
-                            _textReceived = _textReceived.Substring(_textReceived.IndexOf('\n') + 1);
-                        }
-                        else if (line == "")
-                            break;
-                        else
-                        {
-                            _textReceived = sb.ToString() + _textReceived;
-                            sb.Clear();
-                        }
+                        bytesRead = _socket.Receive(buff);
+                        _textReceived += System.Text.ASCIIEncoding.ASCII.GetString(buff, 0, bytesRead);
                     }
-                    if (sb.Length == 0)
-                        break;
-                    if (_regAuthRequest.IsMatch(sb.ToString().Trim()))
-                        tmp.Add(sb.ToString());
-                    else if (_regMessageStart.Matches(sb.ToString()).Count >= 2)
+                    catch (System.ObjectDisposedException dException) { return; }
+                    catch (Exception e) { }
+                    _socket.BeginReceive(sa.Buffer, 0, sa.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), sa);
+                    List<string> tmp = new List<string>();
+                    while (_regMessageStart.IsMatch(_textReceived))
                     {
-                        if (_regContentLength.IsMatch(sb.ToString()))
+                        Match m = _regMessageStart.Match(_textReceived);
+                        if (m.Index > 0)
+                            _textReceived = _textReceived.Substring(m.Index);
+                        StringBuilder sb = new StringBuilder();
+                        while (_textReceived.Contains('\n'))
                         {
-                            int len = int.Parse(_regContentLength.Match(sb.ToString()).Groups[1].Value) + 1;
-                            if (_textReceived.Length >= len)
+                            string line = _textReceived.Substring(0, _textReceived.IndexOf('\n'));
+                            if (_regMessageStart.IsMatch(line))
                             {
-                                tmp.Add(sb.ToString());
-                                tmp.Add(_textReceived.Substring(0, len));
-                                _textReceived = _textReceived.Substring(len);
+                                sb.AppendLine(line);
+                                _textReceived = _textReceived.Substring(_textReceived.IndexOf('\n') + 1);
                             }
+                            else if (line == "")
+                                break;
                             else
                             {
                                 _textReceived = sb.ToString() + _textReceived;
-                                break;
+                                sb.Clear();
                             }
                         }
-                        else
+                        if (sb.Length == 0)
+                            break;
+                        if (_regAuthRequest.IsMatch(sb.ToString().Trim()))
                             tmp.Add(sb.ToString());
+                        else if (_regMessageStart.Matches(sb.ToString()).Count >= 2)
+                        {
+                            if (_regContentLength.IsMatch(sb.ToString()))
+                            {
+                                int len = int.Parse(_regContentLength.Match(sb.ToString()).Groups[1].Value) + 1;
+                                if (_textReceived.Length >= len)
+                                {
+                                    tmp.Add(sb.ToString());
+                                    tmp.Add(_textReceived.Substring(0, len));
+                                    _textReceived = _textReceived.Substring(len);
+                                }
+                                else
+                                {
+                                    _textReceived = sb.ToString() + _textReceived;
+                                    break;
+                                }
+                            }
+                            else
+                                tmp.Add(sb.ToString());
+                        }
+                        else
+                        {
+                            _textReceived = sb.ToString() + _textReceived;
+                            break;
+                        }
                     }
-                    else
+                    if (tmp.Count > 0)
                     {
-                        _textReceived = sb.ToString() + _textReceived;
-                        break;
+                        Task t = new Task(() =>
+                        {
+                            _processSplitMessages(tmp.ToArray());
+                        });
+                        _mreMessageTasks.WaitOne();
+                        _messageTasks.Enqueue(t);
+                        if (_messageTasks.Count == 1)
+                            t.Start();
+                        _mreMessageTasks.Set();
                     }
+                    _mreTextRecieved.Set();
                 }
-                if (tmp.Count > 0)
+                else
                 {
-                    Task t = new Task(() =>
+                    try
                     {
-                        _processSplitMessages(tmp.ToArray());
-                    });
-                    _mreMessageTasks.WaitOne();
-                    _messageTasks.Enqueue(t);
-                    if (_messageTasks.Count == 1)
-                        t.Start();
-                    _mreMessageTasks.Set();
+                        stateObject state = new stateObject();
+                        _socket.BeginReceive(sa.Buffer, 0, sa.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), sa);
+                    }
+                    catch (Exception e) { }
                 }
-                _mreTextRecieved.Set();
-            }
-            else
-            {
-                try
-                {
-                    stateObject state = new stateObject();
-                    _socket.BeginReceive(sa.Buffer, 0, sa.Buffer.Length, SocketFlags.None, new AsyncCallback(_processMessageData), sa);
-                }
-                catch (Exception e) { }
+            }catch(ObjectDisposedException ode){}
+            catch(Exception e) {
+                try { _close(); }
+                catch (Exception ex) { }
+                _exit = true;
             }
         }
 

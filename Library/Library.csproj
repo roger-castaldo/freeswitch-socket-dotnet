@@ -7,10 +7,10 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Description>A DotNet implementation to connect to a freeswitch srver over event socket, accepts operations in both directions.</Description>
     <PackageProjectUrl>https://github.com/roger-castaldo/freeswitch-socket-dotnet</PackageProjectUrl>
-    <PackageLicenseUrl>https://opensource.org/licenses/MIT</PackageLicenseUrl>
-    <Version>1.0.9</Version>
-    <AssemblyVersion>1.0.9.0</AssemblyVersion>
-    <PackageReleaseNotes>adjustment to allow for non-blocking issue backgroun command calls where the trhead is allowed to continue instead of waiting for a response from the server.</PackageReleaseNotes>
+    <PackageLicenseUrl></PackageLicenseUrl>
+    <Version>1.0.11</Version>
+    <AssemblyVersion>1.0.11.0</AssemblyVersion>
+    <PackageReleaseNotes>added new exception catching for socket being disposed during async call</PackageReleaseNotes>
   </PropertyGroup>
 
 </Project>
